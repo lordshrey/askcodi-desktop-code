@@ -15,12 +15,18 @@ export class AskCodiAuthManager {
    * Tests key against /v1/models endpoint
    */
   async setApiKey(apiKey: string): Promise<{ success: boolean; error?: string }> {
+    const url = `${ASKCODI_API_BASE}/models`
+    console.log(`[AskCodi Auth] Validating API key against: ${url}`)
+    console.log(`[AskCodi Auth] API key prefix: ${apiKey.substring(0, 4)}...`)
     try {
-      const response = await fetch(`${ASKCODI_API_BASE}/models`, {
+      const response = await fetch(url, {
         headers: { Authorization: `Bearer ${apiKey}` },
       })
+      console.log(`[AskCodi Auth] Response status: ${response.status} ${response.statusText}`)
 
       if (!response.ok) {
+        const body = await response.text().catch(() => "<unreadable>")
+        console.error(`[AskCodi Auth] Error response body: ${body}`)
         if (response.status === 401 || response.status === 403) {
           return { success: false, error: "Invalid API key" }
         }
@@ -31,10 +37,14 @@ export class AskCodiAuthManager {
         apiKey,
         authMethod: "api-key",
       })
+      console.log(`[AskCodi Auth] API key validated and saved`)
 
       return { success: true }
     } catch (error) {
-      return { success: false, error: `Connection failed: ${(error as Error).message}` }
+      const err = error as Error
+      console.error(`[AskCodi Auth] Fetch failed:`, err.message)
+      console.error(`[AskCodi Auth] Error cause:`, (err as any).cause ?? "none")
+      return { success: false, error: `Connection failed: ${err.message}` }
     }
   }
 
@@ -113,14 +123,20 @@ export class AskCodiAuthManager {
   async fetchModels(): Promise<Array<{ id: string; name: string }>> {
     const credential = this.getValidCredential()
     if (!credential) {
+      console.error("[AskCodi Auth] fetchModels: not authenticated")
       throw new Error("Not authenticated with AskCodi")
     }
 
-    const response = await fetch(`${ASKCODI_API_BASE}/models`, {
+    const url = `${ASKCODI_API_BASE}/models`
+    console.log(`[AskCodi Auth] fetchModels: ${url}`)
+    const response = await fetch(url, {
       headers: { Authorization: `Bearer ${credential}` },
     })
+    console.log(`[AskCodi Auth] fetchModels response: ${response.status}`)
 
     if (!response.ok) {
+      const body = await response.text().catch(() => "<unreadable>")
+      console.error(`[AskCodi Auth] fetchModels error body: ${body}`)
       throw new Error(`Failed to fetch models: ${response.status}`)
     }
 
@@ -130,6 +146,7 @@ export class AskCodiAuthManager {
       id: m.id,
       name: m.id, // Use ID as name, can be improved with display names
     }))
+    console.log(`[AskCodi Auth] fetchModels: got ${models.length} models`)
 
     return models
   }

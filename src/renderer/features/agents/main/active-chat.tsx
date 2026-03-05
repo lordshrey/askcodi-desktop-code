@@ -171,7 +171,6 @@ import { useTextContextSelection } from "../hooks/use-text-context-selection"
 import { useToggleFocusOnCmdEsc } from "../hooks/use-toggle-focus-on-cmd-esc"
 import { ACPChatTransport } from "../lib/acp-chat-transport"
 import { AskCodiChatTransport } from "../lib/askcodi-chat-transport"
-import { formatHistoryForContext } from "../lib/export-chat"
 import {
   clearSubChatDraft,
   getSubChatDraftFull
@@ -4526,85 +4525,6 @@ const ChatViewInner = memo(function ChatViewInner({
     [onProviderChange, subChatId],
   )
 
-  // Continue conversation with a different provider - creates new sub-chat with history attachment
-  const isContinuingRef = useRef(false)
-  const handleContinueWithProvider = useCallback(
-    async (targetProvider: "claude-code" | "codex") => {
-      if (isStreaming || isContinuingRef.current) return
-      if (!messages || messages.length === 0) return
-      isContinuingRef.current = true
-
-      try {
-        // 1. Format current messages as markdown
-        const historyMarkdown = formatHistoryForContext(messages as any)
-
-        // 2. Save to disk via writePastedText endpoint
-        const result = await trpcClient.files.writePastedText.mutate({
-          subChatId,
-          text: historyMarkdown,
-        })
-
-        // 3. Create new sub-chat
-        const newSubChat = await trpcClient.chats.createSubChat.mutate({
-          chatId: parentChatId,
-          name: "New Chat",
-          mode: subChatMode,
-        })
-
-        const newId = newSubChat.id
-
-        // Inherit model preferences from source sub-chat for deterministic behavior.
-        appStore.set(
-          subChatModelIdAtomFamily(newId),
-          appStore.get(subChatModelIdAtomFamily(subChatId)),
-        )
-        appStore.set(
-          subChatCodexModelIdAtomFamily(newId),
-          appStore.get(subChatCodexModelIdAtomFamily(subChatId)),
-        )
-        appStore.set(
-          subChatCodexThinkingAtomFamily(newId),
-          appStore.get(subChatCodexThinkingAtomFamily(subChatId)),
-        )
-
-        // 4. Store pending chat history for the new sub-chat to consume on mount
-        const historyFile: PendingChatHistory["file"] = {
-          id: `chatHistory_${Date.now()}_${Math.random().toString(36).slice(2, 9)}`,
-          filePath: result.filePath,
-          filename: result.filename,
-          size: result.size,
-          preview: subChatNameRef.current?.trim() || "Previous Chat",
-          createdAt: new Date(),
-          kind: "chatHistory",
-        }
-        appStore.set(pendingChatHistoryAtom, { subChatId: newId, file: historyFile })
-
-        // 5. Update Zustand store and switch to new tab
-        const store = useAgentSubChatStore.getState()
-        store.addToAllSubChats({
-          id: newId,
-          name: "New Chat",
-          created_at: new Date().toISOString(),
-          mode: subChatMode,
-        })
-        appStore.set(subChatModeAtomFamily(newId), subChatMode)
-        store.addToOpenSubChats(newId)
-        store.setActiveSubChat(newId)
-
-        // 6. Set provider override AFTER tab switch so the outer component picks it up
-        // We call onProviderChange which sets subChatProviderOverrides in the outer scope
-        // The new sub-chat has 0 messages so the guard in handleProviderChange will pass
-        onProviderChange?.(newId, targetProvider)
-      } catch (error) {
-        console.error("[handleContinueWithProvider] Error:", error)
-        toast.error("Failed to continue with provider")
-      } finally {
-        isContinuingRef.current = false
-      }
-    },
-    [isStreaming, messages, subChatId, parentChatId, subChatMode, onProviderChange],
-  )
-
   return (
     <SearchHighlightProvider>
       <div className="flex flex-col flex-1 min-h-0 relative">
@@ -4811,7 +4731,6 @@ const ChatViewInner = memo(function ChatViewInner({
         onInputContentChange={setInputHasContent}
         onSubmitWithQuestionAnswer={submitWithQuestionAnswerCallback}
         onProviderChange={handleInputProviderChange}
-        onContinueWithProvider={handleContinueWithProvider}
         isActive={isActive}
       />
 

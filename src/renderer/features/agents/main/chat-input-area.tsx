@@ -204,8 +204,6 @@ export interface ChatInputAreaProps {
   onSubmitWithQuestionAnswer?: () => void
   // Callback to switch provider for brand new (empty) sub-chats
   onProviderChange?: (provider: "claude-code" | "codex" | "askcodi") => void
-  // Callback to continue chat with a different provider (creates new sub-chat with history)
-  onContinueWithProvider?: (provider: "claude-code" | "codex" | "askcodi") => void
   // Whether this sub-chat tab is the active/visible one (prevents window-level hotkeys in background tabs)
   isActive?: boolean
 }
@@ -261,7 +259,6 @@ function arePropsEqual(prevProps: ChatInputAreaProps, nextProps: ChatInputAreaPr
     prevProps.onInputContentChange !== nextProps.onInputContentChange ||
     prevProps.onSubmitWithQuestionAnswer !== nextProps.onSubmitWithQuestionAnswer ||
     prevProps.onProviderChange !== nextProps.onProviderChange ||
-    prevProps.onContinueWithProvider !== nextProps.onContinueWithProvider ||
     prevProps.onSendFromQueue !== nextProps.onSendFromQueue
   ) {
     return false
@@ -412,7 +409,6 @@ export const ChatInputArea = memo(function ChatInputArea({
   onInputContentChange,
   onSubmitWithQuestionAnswer,
   onProviderChange,
-  onContinueWithProvider,
   isActive = true,
 }: ChatInputAreaProps) {
   // Local state - changes here don't re-render parent
@@ -671,9 +667,6 @@ export const ChatInputArea = memo(function ChatInputArea({
     hasCustomClaudeConfig,
     selectedModel,
   ])
-  const canSwitchProvider =
-    messageTokenData.messageCount === 0 && !isStreaming && !sandboxId
-
   // MCP status - from getAllMcpConfig query (provides global/local grouping)
   const setSettingsOpen = useSetAtom(agentsSettingsDialogOpenAtom)
   const setSettingsTab = useSetAtom(agentsSettingsDialogActiveTabAtom)
@@ -1595,12 +1588,9 @@ export const ChatInputArea = memo(function ChatInputArea({
                       onOpenChange={setIsModelDropdownOpen}
                       selectedAgentId={provider}
                       onSelectedAgentIdChange={(nextProvider) => {
-                        if (!canSwitchProvider) return
                         if (nextProvider === provider) return
                         onProviderChange?.(nextProvider)
                       }}
-                      allowProviderSwitch={canSwitchProvider}
-                      onContinueWithProvider={!canSwitchProvider ? onContinueWithProvider : undefined}
                       selectedModelLabel={selectedModelLabel}
                       onOpenModelsSettings={() => {
                         setSettingsTab("models")

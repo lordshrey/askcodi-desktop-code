@@ -360,6 +360,9 @@ function registerIpcHandlers(): void {
   ipcMain.handle("auth:logout", async (event) => {
     if (!validateSender(event)) return
     getAuthManager().logout()
+    // Also clear AskCodi auth
+    const askCodiAuth = getAskCodiAuthManager()
+    askCodiAuth?.logout()
     // Clear cookie from persist:main partition
     const ses = session.fromPartition("persist:main")
     try {
@@ -414,7 +417,9 @@ function registerIpcHandlers(): void {
       return { success: false, error: "Invalid API key" }
     }
     const authManager = getAskCodiAuthManager() || initAskCodiAuthManager()
-    return authManager.setApiKey(apiKey.trim())
+    const result = await authManager.setApiKey(apiKey.trim())
+    console.log("[IPC] askcodi:validate-api-key result:", result.success ? "success" : result.error)
+    return result
   })
 
   // AskCodi auth success - reload window to main app
@@ -809,61 +814,42 @@ export function createWindow(options?: { chatId?: string; subChatId?: string }):
     // windowManager handles cleanup via 'closed' event listener
   })
 
-  // Load the renderer - check auth first
+  // Load the renderer — require AskCodi auth
   const devServerUrl = process.env.ELECTRON_RENDERER_URL
-  const authManager = getAuthManager()
-
   const askCodiAuth = getAskCodiAuthManager()
-
-  console.log("[Main] ========== AUTH CHECK ==========")
-  console.log("[Main] AuthManager exists:", !!authManager)
-  const isAuth = authManager.isAuthenticated()
   const isAskCodiAuth = askCodiAuth?.isAuthenticated() ?? false
-  console.log("[Main] isAuthenticated():", isAuth)
-  console.log("[Main] isAskCodiAuthenticated():", isAskCodiAuth)
-  const user = authManager.getUser()
-  console.log("[Main] getUser():", user ? user.email : "null")
-  console.log("[Main] ================================")
 
-  if (isAuth || isAskCodiAuth) {
-    console.log("[Main] ✓ User authenticated, loading app")
-    // Get stable window ID from manager (assigned during register)
-    // "main" for first window, "window-2", "window-3", etc. for additional windows
-    const windowId = windowManager.getStableId(window)
+  if (!isAskCodiAuth) {
+    console.log("[Main] AskCodi not authenticated, showing login page")
+    showLoginPageInWindow(window)
+    return window
+  }
 
-    // Build URL params including optional chatId/subChatId
-    const buildParams = (params: URLSearchParams) => {
-      params.set("windowId", windowId)
-      if (options?.chatId) params.set("chatId", options.chatId)
-      if (options?.subChatId) params.set("subChatId", options.subChatId)
-    }
+  console.log("[Main] AskCodi authenticated, loading main app")
 
-    if (devServerUrl) {
-      // Pass params via query for dev mode
-      const url = new URL(devServerUrl)
-      buildParams(url.searchParams)
-      window.loadURL(url.toString())
-      // Only open devtools for first window in development
-      if (!app.isPackaged && windowId === "main") {
-        window.webContents.openDevTools()
-      }
-    } else {
-      // Pass params via hash for production (file:// URLs)
-      const hashParams = new URLSearchParams()
-      buildParams(hashParams)
-      window.loadFile(join(__dirname, "../renderer/index.html"), {
-        hash: hashParams.toString(),
-      })
+  // Get stable window ID from manager (assigned during register)
+  const windowId = windowManager.getStableId(window)
+
+  // Build URL params including optional chatId/subChatId
+  const buildParams = (params: URLSearchParams) => {
+    params.set("windowId", windowId)
+    if (options?.chatId) params.set("chatId", options.chatId)
+    if (options?.subChatId) params.set("subChatId", options.subChatId)
+  }
+
+  if (devServerUrl) {
+    const url = new URL(devServerUrl)
+    buildParams(url.searchParams)
+    window.loadURL(url.toString())
+    if (!app.isPackaged && windowId === "main") {
+      window.webContents.openDevTools()
     }
   } else {
-    console.log("[Main] ✗ Not authenticated, showing login page")
-    // In dev mode, login.html is in src/renderer
-    if (devServerUrl) {
-      const loginPath = join(app.getAppPath(), "src/renderer/login.html")
-      window.loadFile(loginPath)
-    } else {
-      window.loadFile(join(__dirname, "../renderer/login.html"))
-    }
+    const hashParams = new URLSearchParams()
+    buildParams(hashParams)
+    window.loadFile(join(__dirname, "../renderer/index.html"), {
+      hash: hashParams.toString(),
+    })
   }
 
   // Log page load - traffic light visibility is managed by the renderer

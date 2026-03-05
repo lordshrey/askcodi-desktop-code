@@ -3,7 +3,6 @@
  * Allows users to open askcodi from terminal with: askcodi . or askcodi /path/to/project
  *
  * Based on PR #16 by @caffeinum (Aleksey Bykhun)
- * https://github.com/21st-dev/askcodi/pull/16
  */
 
 import { app } from "electron"

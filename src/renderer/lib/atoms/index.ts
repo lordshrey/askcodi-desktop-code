@@ -754,6 +754,7 @@ export type BillingMethod =
   | "custom-model"
   | "codex-subscription"
   | "codex-api-key"
+  | "askcodi"
   | null
 
 export const billingMethodAtom = atomWithStorage<BillingMethod>(

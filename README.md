@@ -1,10 +1,10 @@
-# 1Code
+# AskCodi
 
-[1Code.dev](https://1code.dev)
+[AskCodi.dev](https://askcodi.com)
 
 Open-source coding agent client. Run Claude Code, Codex, and more - locally or in the cloud.
 
-By [21st.dev](https://21st.dev) team
+By the AskCodi team
 
 ## Highlights
 
@@ -108,13 +108,13 @@ Full MCP server lifecycle management with a built-in plugin marketplace. No conf
 
 Trigger agents from GitHub, Linear, Slack, or manually from git events. Auto-review PRs, fix CI failures, and complete tasks - all configurable.
 
-- **@1code Triggers** - Tag @1code in GitHub, Linear, or Slack to start agents
+- **@askcodi Triggers** - Tag @askcodi in GitHub, Linear, or Slack to start agents
 - **Git Event Triggers** - Run automations on push, PR, or any git event
 - **Conditions & Filters** - Control when automations fire
 - **Execution Timeline** - Visual history of past runs
 - **Silent Mode** - Toggle respond-to-trigger for background automations
 
-Automations require a [Pro or Max subscription](https://1code.dev/pro). Learn more at [1code.dev/agents/async](https://1code.dev/agents/async).
+Automations require a [Pro or Max subscription](https://askcodi.com/pro). Learn more at [askcodi.com/agents/async](https://askcodi.com/agents/async).
 
 
 ## API
@@ -122,7 +122,7 @@ Automations require a [Pro or Max subscription](https://1code.dev/pro). Learn mo
 Run coding agents programmatically. Point at a repo, give it a task - the agent runs in a sandbox and delivers a PR.
 
 ```bash
-curl -X POST https://1code.dev/api/v1/tasks \
+curl -X POST https://askcodi.com/api/v1/tasks \
   -H "Authorization: Bearer YOUR_API_KEY" \
   -d '{
     "repository": "https://github.com/your-org/your-repo",
@@ -135,7 +135,7 @@ curl -X POST https://1code.dev/api/v1/tasks \
 - **Async Execution** - Fire and forget, poll for status or get notified
 - **Follow-up Messages** - Send additional instructions to a running task
 
-Learn more at [1code.dev/agents/api](https://1code.dev/agents/api)
+Learn more at [askcodi.com/agents/api](https://askcodi.com/agents/api)
 
 ## Installation
 
@@ -154,11 +154,11 @@ bun run package:mac  # or package:win, package:linux
 >
 > **Python note:** Python 3.11 is recommended for native module rebuilds. On Python 3.12+, make sure `setuptools` is installed (`pip install setuptools`).
 
-### Option 2: Subscribe to 1code.dev (recommended)
+### Option 2: Subscribe to askcodi.com (recommended)
 
-Get pre-built releases + background agents support by subscribing at [1code.dev](https://1code.dev).
+Get pre-built releases + background agents support by subscribing at [askcodi.com](https://askcodi.com).
 
-Your subscription helps us maintain and improve 1Code.
+Your subscription helps us maintain and improve AskCodi.
 
 ## Development
 

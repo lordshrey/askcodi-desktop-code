@@ -23,7 +23,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## What is this?
 
-**21st Agents** - A local-first Electron desktop app for AI-powered code assistance. Users create chat sessions linked to local project folders, interact with Claude in Plan or Agent mode, and see real-time tool execution (bash, file edits, web search, etc.).
+**AskCodi Desktop** - A local-first Electron desktop app for AI-powered code assistance. Users create chat sessions linked to local project folders, interact with Claude in Plan or Agent mode, and see real-time tool execution (bash, file edits, web search, etc.).
 
 ## Commands
 
@@ -179,7 +179,7 @@ bun run dev
 
 **Dev vs Production App:**
 - Dev mode uses `twentyfirst-agents-dev://` protocol
-- Dev mode uses separate userData path (`~/Library/Application Support/Agents Dev/`)
+- Dev mode uses separate userData path (`~/Library/Application Support/AskCodi Dev/`)
 - This prevents conflicts between dev and production installs
 
 ## Releasing a New Version
@@ -223,14 +223,14 @@ npm version patch --no-git-tag-version  # 0.0.27 → 0.0.28
 |------|---------|
 | `latest-mac.yml` | Manifest for arm64 auto-updates |
 | `latest-mac-x64.yml` | Manifest for Intel auto-updates |
-| `1Code-{version}-arm64-mac.zip` | Auto-update payload (arm64) |
-| `1Code-{version}-mac.zip` | Auto-update payload (Intel) |
-| `1Code-{version}-arm64.dmg` | Manual download (arm64) |
-| `1Code-{version}.dmg` | Manual download (Intel) |
+| `AskCodi-{version}-arm64-mac.zip` | Auto-update payload (arm64) |
+| `AskCodi-{version}-mac.zip` | Auto-update payload (Intel) |
+| `AskCodi-{version}-arm64.dmg` | Manual download (arm64) |
+| `AskCodi-{version}.dmg` | Manual download (Intel) |
 
 ### Auto-Update Flow
 
-1. App checks `https://cdn.21st.dev/releases/desktop/latest-mac.yml` on startup and when window regains focus (with 1 min cooldown)
+1. App checks the CDN manifest (`latest-mac.yml`) on startup and when window regains focus (with 1 min cooldown)
 2. If version in manifest > current version, shows "Update Available" banner
 3. User clicks Download → downloads ZIP in background
 4. User clicks "Restart Now" → installs update and restarts

@@ -1,7 +1,7 @@
 # Project Context
 
 ## Purpose
-**21st Agents** - A local-first Electron desktop app for AI-powered code assistance. Users create chat sessions linked to local project folders, interact with Claude in Plan or Agent mode, and see real-time tool execution (bash, file edits, web search, etc.).
+**AskCodi Desktop** - A local-first Electron desktop app for AI-powered code assistance. Users create chat sessions linked to local project folders, interact with Claude in Plan or Agent mode, and see real-time tool execution (bash, file edits, web search, etc.).
 
 ## Tech Stack
 | Layer | Tech |
@@ -54,5 +54,5 @@
 
 ## External Dependencies
 - **Claude Code SDK**: `@anthropic-ai/claude-code` for AI interactions
-- **21st.dev CDN**: Auto-update manifests and releases at `cdn.21st.dev`
+- **CDN**: Auto-update manifests and releases
 - **OAuth Provider**: Authentication flow

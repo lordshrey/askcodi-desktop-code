@@ -51,7 +51,7 @@ const PROTOCOL = IS_DEV ? "askcodi-dev" : "askcodi"
 // This ensures dev and prod have separate instance locks
 if (IS_DEV) {
   const { join } = require("path")
-  const devUserData = join(app.getPath("userData"), "..", "Agents Dev")
+  const devUserData = join(app.getPath("userData"), "..", "AskCodi Dev")
   app.setPath("userData", devUserData)
   console.log("[Dev] Using separate userData path:", devUserData)
 }
@@ -904,39 +904,8 @@ if (gotTheLock) {
     // Initialize analytics after auth manager so we can identify user
     initAnalytics()
 
-    // If user already authenticated from previous session, identify them
-    if (authManager.isAuthenticated()) {
-      const user = authManager.getUser()
-      if (user) {
-        identify(user.id, { email: user.email })
-        console.log("[Analytics] User identified from saved session:", user.id)
-      }
-    }
-
-    // Track app opened (now with correct user ID if authenticated)
+    // Track app opened
     trackAppOpened()
-
-    // Set up callback to update cookie when token is refreshed
-    authManager.setOnTokenRefresh(async (authData) => {
-      console.log("[Auth] Token refreshed, updating cookie...")
-      const ses = session.fromPartition("persist:main")
-      try {
-        await ses.cookies.set({
-          url: getBaseUrl(),
-          name: "x-desktop-token",
-          value: authData.token,
-          expirationDate: Math.floor(
-            new Date(authData.expiresAt).getTime() / 1000,
-          ),
-          httpOnly: false,
-          secure: getBaseUrl().startsWith("https"),
-          sameSite: "lax" as const,
-        })
-        console.log("[Auth] Desktop token cookie updated after refresh")
-      } catch (err) {
-        console.error("[Auth] Failed to update cookie:", err)
-      }
-    })
 
     // Initialize database
     try {

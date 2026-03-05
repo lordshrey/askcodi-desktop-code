@@ -206,7 +206,7 @@ export const selectedProjectAtom = atomWithWindowStorage<SelectedProject>(
 
 export const lastSelectedAgentIdAtom = atomWithStorage<string>(
   "agents:lastSelectedAgentId",
-  "claude-code",
+  "askcodi",
   undefined,
   { getOnInit: true },
 )

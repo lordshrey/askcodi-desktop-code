@@ -3,7 +3,6 @@
 import { Brain, ChevronRight, Zap } from "lucide-react"
 import { useCallback, useEffect, useMemo, useRef, useState } from "react"
 import { createPortal } from "react-dom"
-import { AnimatePresence, motion } from "motion/react"
 import {
   Command,
   CommandEmpty,
@@ -15,8 +14,6 @@ import {
 } from "../../../components/ui/command"
 import { CheckIcon, ClaudeCodeIcon, IconChevronDown, ThinkingIcon } from "../../../components/ui/icons"
 import { Switch } from "../../../components/ui/switch"
-import { Checkbox } from "../../../components/ui/checkbox"
-import { Button } from "../../../components/ui/button"
 import {
   Popover,
   PopoverContent,
@@ -25,8 +22,6 @@ import {
 import { cn } from "../../../lib/utils"
 import type { CodexThinkingLevel } from "../lib/models"
 import { formatCodexThinkingLabel } from "../lib/models"
-
-const CROSS_PROVIDER_DIALOG_DISMISSED_KEY = "agent-model-selector:skip-cross-provider-dialog"
 
 const AskCodiIcon = ({ className }: { className?: string }) => (
   <svg viewBox="0 0 24 24" fill="currentColor" className={className}>
@@ -65,11 +60,9 @@ interface AgentModelSelectorProps {
   selectedAgentId: AgentProviderId
   onSelectedAgentIdChange: (provider: AgentProviderId) => void
   selectedModelLabel: string
-  allowProviderSwitch?: boolean
   triggerClassName?: string
   contentClassName?: string
   onOpenModelsSettings?: () => void
-  onContinueWithProvider?: (provider: AgentProviderId) => void
   claude: {
     models: ClaudeModelOption[]
     selectedModelId?: string
@@ -134,9 +127,6 @@ function CodexThinkingSubMenu({
     cancelClose()
     if (triggerRef.current) {
       const triggerRect = triggerRef.current.getBoundingClientRect()
-      const popoverEl = triggerRef.current.closest(
-        "[data-radix-popper-content-wrapper] > *",
-      )
       setSubPos({
         top: triggerRect.top - 4,
         left: triggerRect.right + 6,
@@ -223,171 +213,99 @@ function CodexThinkingSubMenu({
   )
 }
 
-const DIALOG_EASING = [0.55, 0.055, 0.675, 0.19] as const
-
-function CrossProviderConfirmDialog({
-  isOpen,
-  providerName,
-  onConfirm,
-  onClose,
-}: {
-  isOpen: boolean
-  providerName: string
-  onConfirm: (dontShowAgain: boolean) => void
-  onClose: () => void
-}) {
-  const [mounted, setMounted] = useState(false)
-  const [dontShowAgain, setDontShowAgain] = useState(false)
-  const dontShowAgainRef = useRef(false)
-  dontShowAgainRef.current = dontShowAgain
-
-  useEffect(() => {
-    setMounted(true)
-  }, [])
-
-  useEffect(() => {
-    if (isOpen) {
-      setDontShowAgain(false)
-    }
-  }, [isOpen])
-
-  useEffect(() => {
-    if (!isOpen) return
-    const handleKeyDown = (e: KeyboardEvent) => {
-      if (e.key === "Escape") {
-        e.preventDefault()
-        onClose()
-      }
-      if (e.key === "Enter" && !e.shiftKey) {
-        e.preventDefault()
-        onConfirm(dontShowAgainRef.current)
-      }
-    }
-    document.addEventListener("keydown", handleKeyDown)
-    return () => document.removeEventListener("keydown", handleKeyDown)
-  }, [isOpen, onConfirm, onClose])
-
-  if (!mounted) return null
-  const portalTarget = typeof document !== "undefined" ? document.body : null
-  if (!portalTarget) return null
-
-  return createPortal(
-    <AnimatePresence mode="wait" initial={false}>
-      {isOpen && (
-        <>
-          <motion.div
-            initial={{ opacity: 0 }}
-            animate={{ opacity: 1, transition: { duration: 0.18, ease: DIALOG_EASING } }}
-            exit={{ opacity: 0, pointerEvents: "none" as const, transition: { duration: 0.15, ease: DIALOG_EASING } }}
-            className="fixed inset-0 z-[45] bg-black/25"
-            onClick={onClose}
-            style={{ pointerEvents: "auto" }}
-          />
-          <div className="fixed top-[50%] left-[50%] translate-x-[-50%] translate-y-[-50%] z-[46] pointer-events-none">
-            <motion.div
-              initial={{ scale: 0.95, opacity: 0 }}
-              animate={{ scale: 1, opacity: 1 }}
-              exit={{ scale: 0.95, opacity: 0 }}
-              transition={{ duration: 0.2, ease: DIALOG_EASING }}
-              className="w-[90vw] max-w-[400px] pointer-events-auto"
-              onClick={(e) => e.stopPropagation()}
-            >
-              <div className="bg-background rounded-2xl border shadow-2xl overflow-hidden">
-                <div className="p-6">
-                  <h2 className="text-xl font-semibold mb-2">
-                    Switch to {providerName}
-                  </h2>
-                  <p className="text-sm text-muted-foreground">
-                    To use a different agent, a new chat will be created with your current conversation history attached.
-                  </p>
-                </div>
-                <div className="bg-muted p-4 flex items-center justify-between border-t border-border rounded-b-xl">
-                  <label className="flex items-center gap-2 cursor-pointer select-none">
-                    <Checkbox
-                      checked={dontShowAgain}
-                      onCheckedChange={(v) => setDontShowAgain(v === true)}
-                    />
-                    <span className="text-xs text-muted-foreground">Don't ask again</span>
-                  </label>
-                  <div className="flex items-center gap-2">
-                    <Button onClick={onClose} variant="ghost" className="rounded-md">
-                      Cancel
-                    </Button>
-                    <Button onClick={() => onConfirm(dontShowAgain)} variant="default" className="rounded-md">
-                      New chat
-                    </Button>
-                  </div>
-                </div>
-              </div>
-            </motion.div>
-          </div>
-        </>
-      )}
-    </AnimatePresence>,
-    portalTarget,
-  )
-}
-
 export function AgentModelSelector({
   open,
   onOpenChange,
   selectedAgentId,
   onSelectedAgentIdChange,
   selectedModelLabel,
-  allowProviderSwitch = true,
   triggerClassName,
   contentClassName,
   onOpenModelsSettings,
-  onContinueWithProvider,
   claude,
   codex,
   askcodi,
 }: AgentModelSelectorProps) {
   const [search, setSearch] = useState("")
-  const [confirmDialogOpen, setConfirmDialogOpen] = useState(false)
-  const [pendingProvider, setPendingProvider] = useState<AgentProviderId | null>(null)
 
-  const canSelectProvider = (provider: AgentProviderId) =>
-    allowProviderSwitch || selectedAgentId === provider
+  // Build visible tabs dynamically: AskCodi always first, others only if connected
+  const visibleTabs = useMemo(() => {
+    const tabs: { id: AgentProviderId; label: string }[] = [
+      { id: "askcodi", label: "AskCodi" },
+    ]
+    if (claude.isConnected) {
+      tabs.push({ id: "claude-code", label: "Claude" })
+    }
+    if (codex.isConnected) {
+      tabs.push({ id: "codex", label: "Codex" })
+    }
+    return tabs
+  }, [claude.isConnected, codex.isConnected])
 
-  // Build flat list of all models (show all regardless of connection status)
-  const allModels = useMemo<FlatModelItem[]>(() => {
+  // Fall back to "askcodi" if selected provider tab is no longer visible
+  const activeTab = visibleTabs.some((t) => t.id === selectedAgentId)
+    ? selectedAgentId
+    : "askcodi"
+
+  // Sync fallback back to parent if needed
+  useEffect(() => {
+    if (activeTab !== selectedAgentId) {
+      onSelectedAgentIdChange(activeTab)
+    }
+  }, [activeTab, selectedAgentId, onSelectedAgentIdChange])
+
+  const getProviderConnected = (id: AgentProviderId): boolean => {
+    switch (id) {
+      case "claude-code": return claude.isConnected
+      case "codex": return codex.isConnected
+      case "askcodi": return askcodi?.isConnected ?? false
+    }
+  }
+
+  // Build flat list of models for the active tab only
+  const filteredByProvider = useMemo<FlatModelItem[]>(() => {
     const items: FlatModelItem[] = []
 
-    if (claude.isOffline && claude.ollamaModels.length > 0) {
-      for (const m of claude.ollamaModels) {
-        items.push({
-          type: "ollama",
-          modelName: m,
-          isRecommended: m === claude.recommendedOllamaModel,
-        })
-      }
-    } else if (claude.hasCustomModelConfig) {
-      items.push({ type: "custom" })
-    } else {
-      for (const m of claude.models) {
-        items.push({ type: "claude", model: m })
-      }
-    }
-
-    for (const m of codex.models) {
-      items.push({ type: "codex", model: m })
-    }
-
-    if (askcodi) {
-      for (const m of askcodi.models) {
-        items.push({ type: "askcodi", model: m })
-      }
+    switch (activeTab) {
+      case "claude-code":
+        if (claude.isOffline && claude.ollamaModels.length > 0) {
+          for (const m of claude.ollamaModels) {
+            items.push({
+              type: "ollama",
+              modelName: m,
+              isRecommended: m === claude.recommendedOllamaModel,
+            })
+          }
+        } else if (claude.hasCustomModelConfig) {
+          items.push({ type: "custom" })
+        } else {
+          for (const m of claude.models) {
+            items.push({ type: "claude", model: m })
+          }
+        }
+        break
+      case "codex":
+        for (const m of codex.models) {
+          items.push({ type: "codex", model: m })
+        }
+        break
+      case "askcodi":
+        if (askcodi) {
+          for (const m of askcodi.models) {
+            items.push({ type: "askcodi", model: m })
+          }
+        }
+        break
     }
 
     return items
-  }, [claude, codex, askcodi])
+  }, [activeTab, claude, codex, askcodi])
 
   // Filter by search
   const filteredModels = useMemo(() => {
-    if (!search.trim()) return allModels
+    if (!search.trim()) return filteredByProvider
     const q = search.toLowerCase().trim()
-    return allModels.filter((item) => {
+    return filteredByProvider.filter((item) => {
       switch (item.type) {
         case "claude":
           return (
@@ -405,7 +323,7 @@ export function AgentModelSelector({
           return "custom model".includes(q)
       }
     })
-  }, [allModels, search])
+  }, [filteredByProvider, search])
 
   const handleOpenChange = useCallback(
     (nextOpen: boolean) => {
@@ -416,6 +334,10 @@ export function AgentModelSelector({
     },
     [onOpenChange],
   )
+
+  const handleTabClick = (providerId: AgentProviderId) => {
+    onSelectedAgentIdChange(providerId)
+  }
 
   const triggerIcon =
     selectedAgentId === "claude-code" &&
@@ -445,87 +367,21 @@ export function AgentModelSelector({
     }
   }
 
-  const getItemProvider = (item: FlatModelItem): AgentProviderId => {
-    if (item.type === "codex") return "codex"
-    if (item.type === "askcodi") return "askcodi"
-    return "claude-code"
-  }
-
-  const isItemDisabled = (item: FlatModelItem): boolean => {
-    const provider = getItemProvider(item)
-    if (canSelectProvider(provider)) return false
-    // When onContinueWithProvider is available, cross-provider items are clickable (not disabled)
-    if (onContinueWithProvider) return false
-    return true
-  }
-
-  const isItemCrossProvider = (item: FlatModelItem): boolean => {
-    return !canSelectProvider(getItemProvider(item)) && !!onContinueWithProvider
-  }
-
-  const handleConfirmCrossProvider = useCallback(
-    (dontShowAgain: boolean) => {
-      if (dontShowAgain) {
-        try {
-          localStorage.setItem(CROSS_PROVIDER_DIALOG_DISMISSED_KEY, "true")
-        } catch {}
-      }
-      setConfirmDialogOpen(false)
-      if (pendingProvider && onContinueWithProvider) {
-        onContinueWithProvider(pendingProvider)
-      }
-      setPendingProvider(null)
-    },
-    [pendingProvider, onContinueWithProvider],
-  )
-
-  const handleCloseConfirmDialog = useCallback(() => {
-    setConfirmDialogOpen(false)
-    setPendingProvider(null)
-  }, [])
-
   const handleItemClick = (item: FlatModelItem) => {
-    const provider = getItemProvider(item)
-
-    // Cross-provider click → show confirmation or continue directly
-    if (!canSelectProvider(provider) && onContinueWithProvider) {
-      handleOpenChange(false)
-      const dismissed = (() => {
-        try { return localStorage.getItem(CROSS_PROVIDER_DIALOG_DISMISSED_KEY) === "true" } catch { return false }
-      })()
-      if (dismissed) {
-        onContinueWithProvider(provider)
-      } else {
-        setPendingProvider(provider)
-        setConfirmDialogOpen(true)
-      }
-      return
-    }
-
     switch (item.type) {
       case "claude":
-        if (!canSelectProvider("claude-code")) return
-        onSelectedAgentIdChange("claude-code")
         claude.onSelectModel(item.model.id)
         break
       case "codex":
-        if (!canSelectProvider("codex")) return
-        onSelectedAgentIdChange("codex")
         codex.onSelectModel(item.model.id)
         break
       case "askcodi":
-        if (!canSelectProvider("askcodi")) return
-        onSelectedAgentIdChange("askcodi")
         askcodi?.onSelectModel(item.model.id)
         break
       case "ollama":
-        if (!canSelectProvider("claude-code")) return
-        onSelectedAgentIdChange("claude-code")
         claude.onSelectOllamaModel(item.modelName)
         break
       case "custom":
-        if (!canSelectProvider("claude-code")) return
-        onSelectedAgentIdChange("claude-code")
         break
     }
     handleOpenChange(false)
@@ -576,6 +432,17 @@ export function AgentModelSelector({
     }
   }
 
+  const getTabIcon = (id: AgentProviderId) => {
+    switch (id) {
+      case "claude-code":
+        return <ClaudeCodeIcon className="h-3 w-3" />
+      case "codex":
+        return <CodexIcon className="h-3 w-3" />
+      case "askcodi":
+        return <AskCodiIcon className="h-3 w-3" />
+    }
+  }
+
   return (
     <Popover open={open} onOpenChange={handleOpenChange}>
       <PopoverTrigger asChild>
@@ -596,14 +463,43 @@ export function AgentModelSelector({
         align="start"
       >
         <Command shouldFilter={false}>
+          {/* Provider tabs */}
+          <div className="flex items-center gap-0.5 px-1.5 pt-1.5 pb-1">
+            {visibleTabs.map((tab) => {
+              const isActive = activeTab === tab.id
+              const isConnected = getProviderConnected(tab.id)
+              return (
+                <button
+                  key={tab.id}
+                  onClick={() => handleTabClick(tab.id)}
+                  className={cn(
+                    "flex items-center gap-1.5 px-2 py-1 rounded-md text-xs font-medium transition-colors relative",
+                    isActive
+                      ? "bg-accent text-foreground"
+                      : "text-muted-foreground hover:text-foreground hover:bg-muted/50",
+                  )}
+                >
+                  {getTabIcon(tab.id)}
+                  <span>{tab.label}</span>
+                  <span
+                    className={cn(
+                      "h-1.5 w-1.5 rounded-full shrink-0",
+                      isConnected ? "bg-green-500" : "bg-muted-foreground/30",
+                    )}
+                  />
+                </button>
+              )
+            })}
+          </div>
+
           <CommandInput
             placeholder="Search models..."
             value={search}
             onValueChange={setSearch}
           />
 
-          {/* Claude thinking toggle */}
-          {selectedAgentId === "claude-code" &&
+          {/* Claude thinking toggle — only when Claude tab active */}
+          {activeTab === "claude-code" &&
             !claude.isOffline &&
             !claude.hasCustomModelConfig && (
             <>
@@ -625,8 +521,8 @@ export function AgentModelSelector({
             </>
           )}
 
-          {/* Codex thinking level selector with hover sub-menu */}
-          {selectedAgentId === "codex" && (() => {
+          {/* Codex thinking level selector — only when Codex tab active */}
+          {activeTab === "codex" && (() => {
             const selectedCodexModel = codex.models.find((m) => m.id === codex.selectedModelId) || codex.models[0]
             if (!selectedCodexModel) return null
             return (
@@ -646,21 +542,15 @@ export function AgentModelSelector({
               <CommandGroup>
                 {filteredModels.map((item) => {
                   const selected = isItemSelected(item)
-                  const disabled = isItemDisabled(item)
-                  const crossProvider = isItemCrossProvider(item)
                   return (
                     <CommandItem
                       key={getItemKey(item)}
                       value={getItemKey(item)}
                       onSelect={() => handleItemClick(item)}
-                      disabled={disabled}
-                      className={cn("gap-2", crossProvider && "opacity-60")}
+                      className="gap-2"
                     >
                       {getItemIcon(item)}
                       <span className="truncate flex-1">{getItemLabel(item)}</span>
-                      {crossProvider && (
-                        <span className="text-[10px] text-muted-foreground shrink-0">New chat</span>
-                      )}
                       {selected && (
                         <CheckIcon className="h-4 w-4 shrink-0" />
                       )}
@@ -689,13 +579,6 @@ export function AgentModelSelector({
           )}
         </Command>
       </PopoverContent>
-
-      <CrossProviderConfirmDialog
-        isOpen={confirmDialogOpen}
-        providerName={pendingProvider === "codex" ? "Codex" : pendingProvider === "askcodi" ? "AskCodi" : "Claude Code"}
-        onConfirm={handleConfirmCrossProvider}
-        onClose={handleCloseConfirmDialog}
-      />
     </Popover>
   )
 }

@@ -2,6 +2,11 @@ import { AuthStore, AuthData, AuthUser } from "./auth-store"
 import { app, BrowserWindow } from "electron"
 import { AUTH_SERVER_PORT } from "./constants"
 
+// =============================================================================
+// ARCHIVED: 21st.dev OAuth flow — disabled but kept for future reference.
+// All public methods return safe no-op values so callers don't crash.
+// =============================================================================
+
 // Get API URL - in packaged app always use production, in dev allow override
 function getApiBaseUrl(): string {
   if (app.isPackaged) {
@@ -20,10 +25,7 @@ export class AuthManager {
     this.store = new AuthStore(app.getPath("userData"))
     this.isDev = isDev
 
-    // Schedule refresh if already authenticated
-    if (this.store.isAuthenticated()) {
-      this.scheduleRefresh()
-    }
+    // ARCHIVED: Skip token refresh scheduling
   }
 
   /**
@@ -84,17 +86,10 @@ export class AuthManager {
 
   /**
    * Get a valid token, refreshing if necessary
+   * ARCHIVED: Always returns null — 21st.dev OAuth disabled
    */
   async getValidToken(): Promise<string | null> {
-    if (!this.store.isAuthenticated()) {
-      return null
-    }
-
-    if (this.store.needsRefresh()) {
-      await this.refresh()
-    }
-
-    return this.store.getToken()
+    return null
   }
 
   /**
@@ -173,9 +168,10 @@ export class AuthManager {
 
   /**
    * Check if user is authenticated
+   * ARCHIVED: Always returns false — 21st.dev OAuth disabled
    */
   isAuthenticated(): boolean {
-    return this.store.isAuthenticated()
+    return false
   }
 
   /**

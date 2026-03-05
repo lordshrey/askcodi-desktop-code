@@ -90,6 +90,15 @@ function AppContent() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
 
+  // Check AskCodi auth status — if authenticated, auto-set billing method
+  // AskCodi auth doubles as both app login and AI provider, so skip onboarding
+  const { data: askCodiAuthStatus, isLoading: isLoadingAskCodiAuth, isError: isErrorAskCodiAuth } = trpc.askcodi.getAuthStatus.useQuery()
+  useEffect(() => {
+    if (askCodiAuthStatus?.authenticated && billingMethod !== "askcodi") {
+      setBillingMethod("askcodi")
+    }
+  }, [askCodiAuthStatus?.authenticated, billingMethod, setBillingMethod])
+
   // Check if user has existing CLI config (API key or proxy)
   // Based on PR #29 by @sa4hnd
   const { data: cliConfig, isLoading: isLoadingCliConfig } =
@@ -135,6 +144,13 @@ function AppContent() {
   // 4. API key or custom model selected but not completed -> ApiKeyOnboardingPage
   // 5. No valid project selected -> SelectRepoPage
   // 6. Otherwise -> AgentsLayout
+  // Wait for AskCodi auth check before showing onboarding
+  // (prevents BillingMethodPage flash when AskCodi is authenticated)
+  // Fall through on error so the user isn't stuck on a blank screen
+  if (!billingMethod && isLoadingAskCodiAuth && !isErrorAskCodiAuth) {
+    return null
+  }
+
   if (!billingMethod) {
     return <BillingMethodPage />
   }
