@@ -71,7 +71,7 @@ export function AgentsHelpPopover({
   useEffect(() => {
     let cancelled = false
     window.desktopApi
-      .signedFetch("https://21st.dev/api/changelog/desktop?per_page=3")
+      .signedFetch("https://askcodi.com/api/changelog/desktop?per_page=3")
       .then((result) => {
         if (cancelled) return
         const data = result.data as {
@@ -98,12 +98,12 @@ export function AgentsHelpPopover({
   }
 
   const handleChangelogClick = () => {
-    window.desktopApi.openExternal("https://1code.dev/agents/changelog")
+    window.desktopApi.openExternal("https://askcodi.com/agents/changelog")
   }
 
   const handleReleaseClick = (version: string) => {
     window.desktopApi.openExternal(
-      `https://1code.dev/agents/changelog#${version}`,
+      `https://askcodi.com/agents/changelog#${version}`,
     )
   }
 

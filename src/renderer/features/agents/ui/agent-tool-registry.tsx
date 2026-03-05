@@ -219,6 +219,22 @@ export const AgentToolRegistry: Record<string, ToolMeta> = {
     variant: "simple",
   },
 
+  "tool-ListDirectory": {
+    icon: FolderSearch,
+    title: (part) => {
+      const isPending =
+        part.state !== "output-available" && part.state !== "output-error"
+      if (isPending) return "Listing directory"
+      const items = part.output?.items?.length || 0
+      return items > 0 ? `Listed ${items} items` : "Empty directory"
+    },
+    subtitle: (part) => {
+      if (part.state === "input-streaming") return ""
+      return part.input?.path || "."
+    },
+    variant: "simple",
+  },
+
   "tool-Read": {
     icon: EyeIcon,
     title: (part) => {

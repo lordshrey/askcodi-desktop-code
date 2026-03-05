@@ -33,3 +33,12 @@ export function formatCodexThinkingLabel(thinking: CodexThinkingLevel): string {
   if (thinking === "xhigh") return "Extra High"
   return thinking.charAt(0).toUpperCase() + thinking.slice(1)
 }
+
+// AskCodi models - populated dynamically from API
+export type AskCodiModel = {
+  id: string
+  name: string
+}
+
+// Default static list as fallback (populated dynamically via trpc.askcodi.models)
+export const ASKCODI_MODELS: AskCodiModel[] = []

@@ -3,7 +3,7 @@
   <head>
     <meta charset="UTF-8">
     <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' 'unsafe-inline'; style-src 'self' 'unsafe-inline';">
-    <title>21st - Login</title>
+    <title>AskCodi - Login</title>
     <style>
       * {
         margin: 0;
@@ -16,7 +16,13 @@
         --bg: #09090b;
         --text: #fafafa;
         --text-logo: #fafafa;
+        --text-muted: #a1a1aa;
+        --border: #27272a;
         --btn-shadow: 0 0 0 0.5px rgb(23,23,23), inset 0 0 0 1px rgba(255,255,255,0.14);
+        --input-bg: #18181b;
+        --error-bg: rgba(239,68,68,0.1);
+        --error-border: rgba(239,68,68,0.2);
+        --error-text: #ef4444;
       }
 
       /* Light theme */
@@ -25,7 +31,13 @@
           --bg: #ffffff;
           --text: #09090b;
           --text-logo: #09090b;
+          --text-muted: #71717a;
+          --border: #e4e4e7;
           --btn-shadow: 0 0 0 0.5px rgba(0,0,0,0.1), inset 0 0 0 1px rgba(0,0,0,0.1);
+          --input-bg: #f4f4f5;
+          --error-bg: rgba(239,68,68,0.05);
+          --error-border: rgba(239,68,68,0.2);
+          --error-text: #dc2626;
         }
       }
 
@@ -45,7 +57,8 @@
         display: flex;
         flex-direction: column;
         align-items: center;
-        gap: 20px;
+        gap: 24px;
+        width: 320px;
         -webkit-app-region: no-drag;
       }
       .logo {
@@ -56,7 +69,8 @@
         fill: var(--text-logo);
       }
       .login-btn {
-        height: 32px;
+        width: 100%;
+        height: 36px;
         padding: 0 12px;
         background: hsl(228 100% 50%);
         color: #fafafa;
@@ -73,6 +87,92 @@
       }
       .login-btn:active {
         transform: scale(0.97);
+      }
+      .login-btn:disabled {
+        opacity: 0.5;
+        cursor: not-allowed;
+      }
+      .divider {
+        display: flex;
+        align-items: center;
+        width: 100%;
+        gap: 12px;
+        color: var(--text-muted);
+        font-size: 12px;
+      }
+      .divider::before,
+      .divider::after {
+        content: '';
+        flex: 1;
+        height: 1px;
+        background: var(--border);
+      }
+      .api-key-section {
+        width: 100%;
+        display: flex;
+        flex-direction: column;
+        gap: 8px;
+      }
+      .api-key-label {
+        font-size: 13px;
+        color: var(--text-muted);
+      }
+      .api-key-row {
+        display: flex;
+        gap: 8px;
+      }
+      .api-key-input {
+        flex: 1;
+        height: 36px;
+        padding: 0 10px;
+        background: var(--input-bg);
+        color: var(--text);
+        border: 1px solid var(--border);
+        border-radius: 8px;
+        font-size: 13px;
+        font-family: 'SF Mono', 'Fira Code', 'Cascadia Code', monospace;
+        outline: none;
+        transition: border-color 0.15s ease;
+      }
+      .api-key-input:focus {
+        border-color: hsl(228 100% 50%);
+      }
+      .api-key-input::placeholder {
+        color: var(--text-muted);
+      }
+      .connect-btn {
+        height: 36px;
+        padding: 0 14px;
+        background: transparent;
+        color: var(--text);
+        border: 1px solid var(--border);
+        border-radius: 8px;
+        cursor: pointer;
+        font-size: 13px;
+        font-weight: 500;
+        white-space: nowrap;
+        transition: background-color 0.15s ease, border-color 0.15s ease;
+      }
+      .connect-btn:hover {
+        background: var(--input-bg);
+        border-color: var(--text-muted);
+      }
+      .connect-btn:disabled {
+        opacity: 0.5;
+        cursor: not-allowed;
+      }
+      .error-msg {
+        width: 100%;
+        padding: 8px 12px;
+        background: var(--error-bg);
+        border: 1px solid var(--error-border);
+        border-radius: 8px;
+        color: var(--error-text);
+        font-size: 12px;
+        display: none;
+      }
+      .error-msg.visible {
+        display: block;
       }
     </style>
   </head>
@@ -91,31 +191,103 @@
         <!-- Icon -->
         <path fill-rule="evenodd" clip-rule="evenodd" d="M26.3333 12C27.2538 12 28 12.7462 28 13.6667V23.8333C28 23.9254 27.9254 24 27.8333 24H22.8333C22.7413 24 22.6667 24.0746 22.6667 24.1667V27.8333C22.6667 27.9254 22.592 28 22.5 28H13.6667C12.7462 28 12 27.2538 12 26.3333V24.1888C12 24.0717 12.0617 23.9632 12.1621 23.903L18.1504 20.3099C18.2864 20.2283 18.2408 20.0272 18.0951 20.0026L18.0651 20H12.1667C12.0746 20 12 19.9254 12 19.8333V16.1667C12 16.0746 12.0746 16 12.1667 16H18.5C18.592 16 18.6667 15.9254 18.6667 15.8333V12.1667C18.6667 12.0746 18.7413 12 18.8333 12H26.3333ZM18.8333 16C18.7413 16 18.6667 16.0746 18.6667 16.1667V23.8333C18.6667 23.9254 18.7413 24 18.8333 24H22.5C22.592 24 22.6667 23.9254 22.6667 23.8333V16.1667C22.6667 16.0746 22.592 16 22.5 16H18.8333Z" fill="#0033FF"/>
       </svg>
+
       <button class="login-btn" id="loginBtn">Sign in</button>
+
+      <div class="divider">or</div>
+
+      <div class="api-key-section">
+        <div class="api-key-label">Connect with API key</div>
+        <div class="api-key-row">
+          <input type="password" class="api-key-input" id="apiKeyInput" placeholder="Enter your API key..." />
+          <button class="connect-btn" id="connectBtn" disabled>Connect</button>
+        </div>
+      </div>
+
+      <div class="error-msg" id="errorMsg"></div>
     </div>
     <script>
       console.log('Login page loaded');
       console.log('window.desktopApi:', window.desktopApi);
 
       // Listen for auth success from main process (via deep link)
-      // This ensures UI updates even if deep link arrives before click handler completes
       if (window.desktopApi && window.desktopApi.onAuthSuccess) {
         window.desktopApi.onAuthSuccess(function(user) {
           console.log('[Login] Auth success received:', user?.email);
-          // Window will be reloaded by main process, no UI change needed
         });
       }
 
-      document.getElementById('loginBtn').addEventListener('click', function() {
-        console.log('Sign in clicked');
-        console.log('desktopApi available:', !!window.desktopApi);
+      var apiKeyInput = document.getElementById('apiKeyInput');
+      var connectBtn = document.getElementById('connectBtn');
+      var loginBtn = document.getElementById('loginBtn');
+      var errorMsg = document.getElementById('errorMsg');
 
+      function showError(msg) {
+        errorMsg.textContent = msg;
+        errorMsg.classList.add('visible');
+      }
+
+      function hideError() {
+        errorMsg.classList.remove('visible');
+      }
+
+      function setLoading(loading) {
+        connectBtn.disabled = loading || !apiKeyInput.value.trim();
+        connectBtn.textContent = loading ? 'Connecting...' : 'Connect';
+        loginBtn.disabled = loading;
+        apiKeyInput.disabled = loading;
+      }
+
+      // Enable/disable connect button based on input
+      apiKeyInput.addEventListener('input', function() {
+        connectBtn.disabled = !apiKeyInput.value.trim();
+        hideError();
+      });
+
+      // Submit on Enter
+      apiKeyInput.addEventListener('keydown', function(e) {
+        if (e.key === 'Enter' && apiKeyInput.value.trim()) {
+          connectBtn.click();
+        }
+      });
+
+      // Sign in via OAuth
+      loginBtn.addEventListener('click', function() {
+        console.log('Sign in clicked');
+        hideError();
         if (window.desktopApi && window.desktopApi.startAuthFlow) {
-          console.log('Calling startAuthFlow...');
           window.desktopApi.startAuthFlow();
         } else {
-          console.error('Desktop API not available');
-          alert('Desktop API not available. Please restart the app.');
+          showError('Desktop API not available. Please restart the app.');
+        }
+      });
+
+      // Connect with API key
+      connectBtn.addEventListener('click', async function() {
+        var apiKey = apiKeyInput.value.trim();
+        if (!apiKey) return;
+
+        hideError();
+        setLoading(true);
+
+        try {
+          if (!window.desktopApi || !window.desktopApi.askCodiValidateApiKey) {
+            showError('Desktop API not available. Please restart the app.');
+            setLoading(false);
+            return;
+          }
+
+          var result = await window.desktopApi.askCodiValidateApiKey(apiKey);
+          if (result.success) {
+            // API key validated and stored - reload into main app
+            await window.desktopApi.askCodiAuthComplete();
+          } else {
+            showError(result.error || 'Invalid API key');
+            setLoading(false);
+          }
+        } catch (err) {
+          showError(err.message || 'Failed to validate API key');
+          setLoading(false);
         }
       });
     </script>

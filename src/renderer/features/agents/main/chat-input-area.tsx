@@ -42,6 +42,7 @@ import {
   agentsSettingsDialogOpenAtom,
   anthropicOnboardingCompletedAtom,
   apiKeyOnboardingCompletedAtom,
+  askCodiApiKeyAtom,
   codexApiKeyAtom,
   codexOnboardingCompletedAtom,
   customClaudeConfigAtom,
@@ -55,9 +56,11 @@ import {
 import { trpc } from "../../../lib/trpc"
 import { cn } from "../../../lib/utils"
 import {
+  lastSelectedAskCodiModelIdAtom,
   lastSelectedCodexModelIdAtom,
   lastSelectedCodexThinkingAtom,
   lastSelectedModelIdAtom,
+  subChatAskCodiModelIdAtomFamily,
   subChatCodexModelIdAtomFamily,
   subChatCodexThinkingAtomFamily,
   subChatModelIdAtomFamily,
@@ -183,7 +186,7 @@ export interface ChatInputAreaProps {
   // Context
   subChatId: string
   parentChatId: string
-  provider?: "claude-code" | "codex"
+  provider?: "claude-code" | "codex" | "askcodi"
   teamId?: string
   repository?: string
   sandboxId?: string
@@ -200,9 +203,9 @@ export interface ChatInputAreaProps {
   // Callback to send message with question answer (Enter sends immediately, not to queue)
   onSubmitWithQuestionAnswer?: () => void
   // Callback to switch provider for brand new (empty) sub-chats
-  onProviderChange?: (provider: "claude-code" | "codex") => void
+  onProviderChange?: (provider: "claude-code" | "codex" | "askcodi") => void
   // Callback to continue chat with a different provider (creates new sub-chat with history)
-  onContinueWithProvider?: (provider: "claude-code" | "codex") => void
+  onContinueWithProvider?: (provider: "claude-code" | "codex" | "askcodi") => void
   // Whether this sub-chat tab is the active/visible one (prevents window-level hotkeys in background tabs)
   isActive?: boolean
 }
@@ -472,9 +475,17 @@ export const ChatInputArea = memo(function ChatInputArea({
   const [selectedSubChatCodexThinking, setSelectedSubChatCodexThinking] = useAtom(
     subChatCodexThinkingAtom,
   )
+  const subChatAskCodiModelIdAtom = useMemo(
+    () => subChatAskCodiModelIdAtomFamily(subChatId),
+    [subChatId],
+  )
+  const [selectedSubChatAskCodiModelId, setSelectedSubChatAskCodiModelId] = useAtom(
+    subChatAskCodiModelIdAtom,
+  )
   const setLastSelectedModelId = useSetAtom(lastSelectedModelIdAtom)
   const setLastSelectedCodexModelId = useSetAtom(lastSelectedCodexModelIdAtom)
   const setLastSelectedCodexThinking = useSetAtom(lastSelectedCodexThinkingAtom)
+  const setLastSelectedAskCodiModelId = useSetAtom(lastSelectedAskCodiModelIdAtom)
   const [selectedOllamaModel, setSelectedOllamaModel] = useAtom(selectedOllamaModelAtom)
   const availableModels = useAvailableModels()
   const [selectedModel, setSelectedModel] = useState(
@@ -509,6 +520,28 @@ export const ChatInputArea = memo(function ChatInputArea({
   const codexOnboardingCompleted = useAtomValue(codexOnboardingCompletedAtom)
   const { data: claudeCodeIntegration } =
     trpc.claudeCode.getIntegration.useQuery()
+
+  // AskCodi models
+  const storedAskCodiApiKey = useAtomValue(askCodiApiKeyAtom)
+  const hasAskCodiApiKey = Boolean(storedAskCodiApiKey.trim())
+  const { data: askCodiAuthStatus } = trpc.askcodi.getAuthStatus.useQuery()
+  const isAskCodiConnected = askCodiAuthStatus?.authenticated === true
+  const { data: askCodiModelsData } = trpc.askcodi.models.useQuery(undefined, {
+    enabled: hasAskCodiApiKey || isAskCodiConnected,
+    staleTime: 5 * 60 * 1000,
+  })
+  const askCodiModels = useMemo(
+    () => (askCodiModelsData || []).filter((m) => !hiddenModels.includes(m.id)),
+    [askCodiModelsData, hiddenModels],
+  )
+  const selectedAskCodiModel = useMemo(
+    () =>
+      askCodiModels.find((m) => m.id === selectedSubChatAskCodiModelId) ||
+      askCodiModels[0] ||
+      { id: "", name: "AskCodi" },
+    [askCodiModels, selectedSubChatAskCodiModelId],
+  )
+
   const codexUiModels = useMemo(
     () => {
       let models = hasAppCodexApiKey
@@ -575,6 +608,14 @@ export const ChatInputArea = memo(function ChatInputArea({
     setSelectedSubChatCodexThinking,
   ])
 
+  // Materialize resolved AskCodi model into per-subChat storage once mounted.
+  useEffect(() => {
+    if (provider !== "askcodi") return
+    if (selectedAskCodiModel?.id) {
+      setSelectedSubChatAskCodiModelId(selectedAskCodiModel.id)
+    }
+  }, [provider, selectedAskCodiModel?.id, setSelectedSubChatAskCodiModelId])
+
   const customClaudeConfig = useAtomValue(customClaudeConfigAtom)
   const normalizedCustomClaudeConfig =
     normalizeCustomClaudeConfig(customClaudeConfig)
@@ -603,6 +644,10 @@ export const ChatInputArea = memo(function ChatInputArea({
       return selectedCodexModel.name
     }
 
+    if (provider === "askcodi") {
+      return selectedAskCodiModel.name || "AskCodi"
+    }
+
     if (availableModels.isOffline && availableModels.hasOllama) {
       return currentOllamaModel || "Ollama"
     }
@@ -619,6 +664,7 @@ export const ChatInputArea = memo(function ChatInputArea({
   }, [
     provider,
     selectedCodexModel.name,
+    selectedAskCodiModel.name,
     availableModels.isOffline,
     availableModels.hasOllama,
     currentOllamaModel,
@@ -1607,6 +1653,15 @@ export const ChatInputArea = memo(function ChatInputArea({
                           setLastSelectedCodexThinking(thinking)
                         },
                         isConnected: codexOnboardingCompleted,
+                      }}
+                      askcodi={{
+                        models: askCodiModels,
+                        selectedModelId: selectedAskCodiModel.id,
+                        onSelectModel: (modelId) => {
+                          setSelectedSubChatAskCodiModelId(modelId)
+                          setLastSelectedAskCodiModelId(modelId)
+                        },
+                        isConnected: isAskCodiConnected,
                       }}
                     />
                   </div>

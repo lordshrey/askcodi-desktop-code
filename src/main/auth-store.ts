@@ -105,8 +105,12 @@ export class AuthStore {
       }
 
       return null
-    } catch {
-      console.error("Failed to load auth data")
+    } catch (error) {
+      // If the encrypted file exists but can't be decrypted, delete it to stop repeated failures
+      if (existsSync(this.filePath)) {
+        console.warn("Auth data corrupted, clearing invalid auth.dat file")
+        try { unlinkSync(this.filePath) } catch {}
+      }
       return null
     }
   }

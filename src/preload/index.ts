@@ -152,6 +152,11 @@ contextBridge.exposeInMainWorld("desktopApi", {
   updateUser: (updates: { name?: string }) => ipcRenderer.invoke("auth:update-user", updates),
   getAuthToken: () => ipcRenderer.invoke("auth:get-token"),
 
+  // AskCodi auth methods
+  askCodiValidateApiKey: (apiKey: string) =>
+    ipcRenderer.invoke("askcodi:validate-api-key", apiKey) as Promise<{ success: boolean; error?: string }>,
+  askCodiAuthComplete: () => ipcRenderer.invoke("askcodi:auth-complete"),
+
   // Signed fetch - proxies through main process (no CORS issues)
   signedFetch: (
     url: string,
@@ -357,6 +362,8 @@ export interface DesktopApi {
     username: string | null
   } | null>
   getAuthToken: () => Promise<string | null>
+  askCodiValidateApiKey: (apiKey: string) => Promise<{ success: boolean; error?: string }>
+  askCodiAuthComplete: () => Promise<void>
   signedFetch: (
     url: string,
     options?: { method?: string; body?: string; headers?: Record<string, string> },

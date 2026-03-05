@@ -1,5 +1,5 @@
 /**
- * tRPC client for remote web backend (21st.dev)
+ * tRPC client for remote web backend (askcodi.com)
  * Uses signedFetch via IPC for authentication (no CORS issues)
  */
 import { createTRPCClient, httpLink } from "@trpc/client"
@@ -14,7 +14,7 @@ let cachedApiBase: string | null = null
 
 async function getApiBase(): Promise<string> {
   if (!cachedApiBase) {
-    cachedApiBase = await window.desktopApi?.getApiBaseUrl() || "https://21st.dev"
+    cachedApiBase = await window.desktopApi?.getApiBaseUrl() || "https://askcodi.com"
   }
   return cachedApiBase
 }

@@ -177,6 +177,7 @@ const EXPLORING_TOOLS = new Set([
   "tool-Read",
   "tool-Grep",
   "tool-Glob",
+  "tool-ListDirectory",
   "tool-WebSearch",
   "tool-WebFetch",
 ])
@@ -502,6 +503,25 @@ export const AssistantMessageItem = memo(function AssistantMessageItem({
     (message?.parts || []).map((part) => normalizeCodexToolPart(part) as any),
   )
 
+  // Diagnostic logging for AskCodi tool call rendering issues (DEV only)
+  if (isDev && messageParts.length > 0) {
+    const toolParts = messageParts.filter((p: any) => p.type?.startsWith("tool-"))
+    if (toolParts.length > 0) {
+      console.log(
+        `[assistant-msg-debug] message=${message?.id?.slice(-8)} parts=${messageParts.length} tools=${toolParts.length}`,
+        toolParts.map((p: any) => ({
+          type: p.type,
+          toolCallId: p.toolCallId,
+          state: p.state,
+          hasInput: !!p.input,
+          hasOutput: !!p.output,
+          hasResult: !!p.result,
+          hasColon: p.toolCallId?.includes(":"),
+        })),
+      )
+    }
+  }
+
   const contentParts = useMemo(() =>
     messageParts.filter((p: any) => p.type !== "step-start"),
     [messageParts]
@@ -525,8 +545,15 @@ export const AssistantMessageItem = memo(function AssistantMessageItem({
     const orphanToolCallIds = new Set<string>()
     const orphanFirstToolCallIds = new Set<string>()
 
+    // Only run nested-tool detection when Task tools actually exist in this message.
+    // Claude Code uses "parentId:childId" format for subagent nesting.
+    // Other providers (AskCodi, etc.) may have colons in tool call IDs for
+    // unrelated reasons (e.g. step indices). Without Task tools, there's nothing
+    // to nest under, so skip the detection entirely.
+    const hasTaskTools = taskPartIds.size > 0
+
     for (const part of messageParts) {
-      if (part.toolCallId?.includes(":")) {
+      if (hasTaskTools && part.toolCallId?.includes(":")) {
         const parentId = part.toolCallId.split(":")[0]
         if (taskPartIds.has(parentId)) {
           if (!nestedToolsMap.has(parentId)) {

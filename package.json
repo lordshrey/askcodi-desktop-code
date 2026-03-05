@@ -1,12 +1,12 @@
 {
-  "name": "21st-desktop",
+  "name": "askcodi-desktop",
   "version": "0.0.72",
   "private": true,
-  "description": "1Code - UI for parallel work with AI agents",
-  "homepage": "https://21st.dev",
+  "description": "AskCodi - AI-powered code assistance",
+  "homepage": "https://askcodi.com",
   "author": {
-    "name": "21st.dev",
-    "email": "support@21st.dev"
+    "name": "AskCodi",
+    "email": "support@askcodi.com"
   },
   "main": "out/main/index.js",
   "scripts": {
@@ -35,6 +35,7 @@
     "postinstall": "node -e \"if(!process.env.VERCEL){const sdk=require('child_process').execSync('xcrun --show-sdk-path').toString().trim();require('child_process').execSync('electron-rebuild -f -w better-sqlite3,node-pty',{stdio:'inherit',env:{...process.env,CXXFLAGS:'-isystem '+sdk+'/usr/include/c++/v1',CFLAGS:'-isystem '+sdk+'/usr/include'}})}\" && node scripts/patch-electron-dev.mjs"
   },
   "dependencies": {
+    "@ai-sdk/openai": "^3.0.39",
     "@ai-sdk/react": "^3.0.14",
     "@anthropic-ai/claude-agent-sdk": "0.2.45",
     "@git-diff-view/react": "^0.0.35",
@@ -140,14 +141,14 @@
     "vite": "^6.3.4"
   },
   "build": {
-    "appId": "dev.21st.agents",
-    "productName": "1Code",
+    "appId": "com.askcodi.desktop",
+    "productName": "AskCodi",
     "npmRebuild": true,
     "protocols": [
       {
-        "name": "1Code",
+        "name": "AskCodi",
         "schemes": [
-          "twentyfirst-agents"
+          "askcodi"
         ]
       }
     ],
@@ -207,7 +208,7 @@
       "entitlements": "build/entitlements.mac.plist",
       "entitlementsInherit": "build/entitlements.mac.plist",
       "extendInfo": {
-        "NSMicrophoneUsageDescription": "1Code needs microphone access for voice dictation"
+        "NSMicrophoneUsageDescription": "AskCodi needs microphone access for voice dictation"
       }
     },
     "dmg": {
@@ -253,7 +254,7 @@
     },
     "publish": {
       "provider": "generic",
-      "url": "https://cdn.21st.dev/releases/desktop"
+      "url": "https://cdn.askcodi.com/releases/desktop"
     }
   },
   "pnpm": {

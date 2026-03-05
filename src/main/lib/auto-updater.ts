@@ -26,7 +26,7 @@ function initAutoUpdaterConfig() {
 }
 
 // CDN base URL for updates
-const CDN_BASE = "https://cdn.21st.dev/releases/desktop"
+const CDN_BASE = "https://cdn.askcodi.com/releases/desktop"
 
 // Minimum interval between update checks (prevent spam on rapid focus/blur)
 const MIN_CHECK_INTERVAL = 60 * 1000 // 1 minute

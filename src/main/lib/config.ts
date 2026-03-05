@@ -12,9 +12,9 @@ const IS_DEV = !!process.env.ELECTRON_RENDERER_URL
  */
 export function getApiUrl(): string {
   if (app.isPackaged) {
-    return "https://21st.dev"
+    return "https://askcodi.com"
   }
-  return import.meta.env.MAIN_VITE_API_URL || "https://21st.dev"
+  return import.meta.env.MAIN_VITE_API_URL || "https://askcodi.com"
 }
 
 /**

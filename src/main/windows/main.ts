@@ -15,6 +15,7 @@ import { readFileSync, existsSync, writeFileSync, mkdirSync } from "fs"
 import { createIPCHandler } from "trpc-electron/main"
 import { createAppRouter } from "../lib/trpc/routers"
 import { getAuthManager, handleAuthCode, getBaseUrl } from "../index"
+import { getAskCodiAuthManager, initAskCodiAuthManager } from "../askcodi-auth-manager"
 import { registerGitWatcherIPC } from "../lib/git/watcher"
 import { hasActiveClaudeSessions, abortAllClaudeSessions } from "../lib/trpc/routers/claude"
 import { hasActiveCodexStreams, abortAllCodexStreams } from "../lib/trpc/routers/codex"
@@ -85,9 +86,9 @@ function registerIpcHandlers(): void {
     } else if (process.platform === "win32" && win) {
       // Windows: Update title with count as fallback
       if (count !== null && count > 0) {
-        win.setTitle(`1Code (${count})`)
+        win.setTitle(`AskCodi (${count})`)
       } else {
-        win.setTitle("1Code")
+        win.setTitle("AskCodi")
         win.setOverlayIcon(null, "")
       }
     }
@@ -254,7 +255,7 @@ function registerIpcHandlers(): void {
     const win = getWindowFromEvent(event)
     if (win) {
       // Show just the title, or default app name if empty
-      win.setTitle(title || "1Code")
+      win.setTitle(title || "AskCodi")
     }
   })
 
@@ -339,7 +340,7 @@ function registerIpcHandlers(): void {
       const parsed = new URL(senderUrl)
       if (parsed.protocol === "file:") return true
       const hostname = parsed.hostname.toLowerCase()
-      const trusted = ["21st.dev", "localhost", "127.0.0.1"]
+      const trusted = ["askcodi.com", "localhost", "127.0.0.1"]
       return trusted.some((h) => hostname === h || hostname.endsWith(`.${h}`))
     } catch {
       return false
@@ -404,6 +405,34 @@ function registerIpcHandlers(): void {
   ipcMain.handle("auth:get-token", async (event) => {
     if (!validateSender(event)) return null
     return getAuthManager().getValidToken()
+  })
+
+  // AskCodi API key validation from login page
+  ipcMain.handle("askcodi:validate-api-key", async (event, apiKey: string) => {
+    if (!validateSender(event)) return { success: false, error: "Invalid sender" }
+    if (!apiKey || typeof apiKey !== "string") {
+      return { success: false, error: "Invalid API key" }
+    }
+    const authManager = getAskCodiAuthManager() || initAskCodiAuthManager()
+    return authManager.setApiKey(apiKey.trim())
+  })
+
+  // AskCodi auth success - reload window to main app
+  ipcMain.handle("askcodi:auth-complete", (event) => {
+    if (!validateSender(event)) return
+    const win = getWindowFromEvent(event)
+    if (!win) return
+
+    const stableId = windowManager.getStableId(win)
+    if (process.env.ELECTRON_RENDERER_URL) {
+      const url = new URL(process.env.ELECTRON_RENDERER_URL)
+      url.searchParams.set("windowId", stableId)
+      win.loadURL(url.toString())
+    } else {
+      win.loadFile(join(__dirname, "../renderer/index.html"), {
+        query: { windowId: stableId },
+      })
+    }
   })
 
   // Signed fetch - proxies requests through main process (no CORS)
@@ -624,7 +653,7 @@ export function createWindow(options?: { chatId?: string; subChatId?: string }):
     minWidth: 500, // Allow narrow mobile-like mode
     minHeight: 600,
     show: false,
-    title: "1Code",
+    title: "AskCodi",
     backgroundColor: nativeTheme.shouldUseDarkColors ? "#09090b" : "#ffffff",
     // hiddenInset shows native traffic lights inset in the window
     // hiddenInset hides the native title bar but keeps traffic lights visible
@@ -784,15 +813,19 @@ export function createWindow(options?: { chatId?: string; subChatId?: string }):
   const devServerUrl = process.env.ELECTRON_RENDERER_URL
   const authManager = getAuthManager()
 
+  const askCodiAuth = getAskCodiAuthManager()
+
   console.log("[Main] ========== AUTH CHECK ==========")
   console.log("[Main] AuthManager exists:", !!authManager)
   const isAuth = authManager.isAuthenticated()
+  const isAskCodiAuth = askCodiAuth?.isAuthenticated() ?? false
   console.log("[Main] isAuthenticated():", isAuth)
+  console.log("[Main] isAskCodiAuthenticated():", isAskCodiAuth)
   const user = authManager.getUser()
   console.log("[Main] getUser():", user ? user.email : "null")
   console.log("[Main] ================================")
 
-  if (isAuth) {
+  if (isAuth || isAskCodiAuth) {
     console.log("[Main] ✓ User authenticated, loading app")
     // Get stable window ID from manager (assigned during register)
     // "main" for first window, "window-2", "window-3", etc. for additional windows

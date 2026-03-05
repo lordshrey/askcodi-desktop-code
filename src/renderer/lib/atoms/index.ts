@@ -764,7 +764,7 @@ export const billingMethodAtom = atomWithStorage<BillingMethod>(
 )
 
 // Whether user has completed Anthropic OAuth during onboarding
-// This is used to show the onboarding screen after 21st.dev sign-in
+// This is used to show the onboarding screen after askcodi.com sign-in
 // Reset on logout
 export const anthropicOnboardingCompletedAtom = atomWithStorage<boolean>(
   "onboarding:anthropic-completed",
@@ -816,6 +816,21 @@ export function normalizeCodexApiKey(apiKey: string): string | null {
   if (!trimmed.startsWith("sk-")) return null
   return trimmed
 }
+
+// ============================================
+// ASKCODI AUTH
+// ============================================
+
+// AskCodi API key (stored in renderer for quick access; canonical copy in main process)
+export const askCodiApiKeyAtom = atomWithStorage<string>(
+  "askcodi:api-key",
+  "",
+  undefined,
+  { getOnInit: true },
+)
+
+// AskCodi login modal open state
+export const askCodiLoginModalOpenAtom = atom<boolean>(false)
 
 // ============================================
 // MODEL VISIBILITY (hide specific models from selector)

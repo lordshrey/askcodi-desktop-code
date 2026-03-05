@@ -275,9 +275,9 @@ export const projectsRouter = router({
         throw new Error("Invalid GitHub URL or repo format")
       }
 
-      // Clone to ~/.21st/repos/{owner}/{repo}
+      // Clone to ~/.askcodi/repos/{owner}/{repo}
       const homePath = app.getPath("home")
-      const reposDir = join(homePath, ".21st", "repos", owner)
+      const reposDir = join(homePath, ".askcodi", "repos", owner)
       const clonePath = join(reposDir, repo)
 
       // Check if already cloned
@@ -464,9 +464,9 @@ export const projectsRouter = router({
         await new Promise((resolve) => setTimeout(resolve, 100))
       }
 
-      // Default to ~/.21st/repos/
+      // Default to ~/.askcodi/repos/
       const homePath = app.getPath("home")
-      const defaultPath = join(homePath, ".21st", "repos")
+      const defaultPath = join(homePath, ".askcodi", "repos")
       await mkdir(defaultPath, { recursive: true })
 
       const result = await dialog.showOpenDialog(window, {

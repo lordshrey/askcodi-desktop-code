@@ -225,6 +225,13 @@ export const lastSelectedCodexModelIdAtom = atomWithStorage<string>(
   { getOnInit: true },
 )
 
+export const lastSelectedAskCodiModelIdAtom = atomWithStorage<string>(
+  "agents:lastSelectedAskCodiModelId",
+  "",
+  undefined,
+  { getOnInit: true },
+)
+
 export type CodexThinkingPreference = "low" | "medium" | "high" | "xhigh"
 
 export const lastSelectedCodexThinkingAtom = atomWithStorage<CodexThinkingPreference>(
@@ -287,6 +294,36 @@ export const subChatCodexModelIdAtomFamily = atomFamily((subChatId: string) =>
       const current = get(subChatCodexModelIdsStorageAtom)
       if (current[subChatId] === newModelId) return
       set(subChatCodexModelIdsStorageAtom, { ...current, [subChatId]: newModelId })
+    },
+  ),
+)
+
+// Storage for per-subChat AskCodi model selection.
+// Falls back to lastSelectedAskCodiModelIdAtom when sub-chat has no explicit selection yet.
+const subChatAskCodiModelIdsStorageAtom = atomWithStorage<Record<string, string>>(
+  "agents:subChatAskCodiModelIds",
+  {},
+  undefined,
+  { getOnInit: true },
+)
+
+export const subChatAskCodiModelIdAtomFamily = atomFamily((subChatId: string) =>
+  atom(
+    (get) => {
+      if (!subChatId) return get(lastSelectedAskCodiModelIdAtom)
+      return (
+        get(subChatAskCodiModelIdsStorageAtom)[subChatId] ??
+        get(lastSelectedAskCodiModelIdAtom)
+      )
+    },
+    (get, set, newModelId: string) => {
+      if (!subChatId) {
+        set(lastSelectedAskCodiModelIdAtom, newModelId)
+        return
+      }
+      const current = get(subChatAskCodiModelIdsStorageAtom)
+      if (current[subChatId] === newModelId) return
+      set(subChatAskCodiModelIdsStorageAtom, { ...current, [subChatId]: newModelId })
     },
   ),
 )
@@ -705,7 +742,7 @@ export const pendingConflictResolutionMessageAtom = atom<{ message: string; subC
 // After successful OAuth flow, this triggers automatic retry of the message
 export type PendingAuthRetryMessage = {
   subChatId: string  // Required: only retry in the correct chat
-  provider: "claude-code" | "codex"
+  provider: "claude-code" | "codex" | "askcodi"
   prompt: string
   images?: Array<{
     base64Data: string

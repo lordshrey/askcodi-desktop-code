@@ -31,6 +31,7 @@ import {
   agentsDebugModeAtom,
   justCreatedIdsAtom,
   lastSelectedAgentIdAtom,
+  lastSelectedAskCodiModelIdAtom,
   lastSelectedCodexModelIdAtom,
   lastSelectedCodexThinkingAtom,
   lastSelectedBranchesAtom,
@@ -55,6 +56,7 @@ import {
   agentsSettingsDialogActiveTabAtom,
   anthropicOnboardingCompletedAtom,
   apiKeyOnboardingCompletedAtom,
+  askCodiApiKeyAtom,
   codexApiKeyAtom,
   codexOnboardingCompletedAtom,
   customClaudeConfigAtom,
@@ -169,6 +171,7 @@ const agents = [
   { id: "claude-code", name: "Claude Code", hasModels: true },
   { id: "cursor", name: "Cursor CLI", disabled: true },
   { id: "codex", name: "OpenAI Codex" },
+  { id: "askcodi", name: "AskCodi", hasModels: true },
 ]
 
 interface NewChatFormProps {
@@ -327,6 +330,17 @@ export function NewChatForm({
   const [lastSelectedCodexThinking, setLastSelectedCodexThinking] = useAtom(
     lastSelectedCodexThinkingAtom,
   )
+  const [lastSelectedAskCodiModelId, setLastSelectedAskCodiModelId] = useAtom(
+    lastSelectedAskCodiModelIdAtom,
+  )
+  const storedAskCodiApiKey = useAtomValue(askCodiApiKeyAtom)
+  const hasAskCodiApiKey = Boolean(storedAskCodiApiKey.trim())
+  const { data: askCodiAuthStatus } = trpc.askcodi.getAuthStatus.useQuery()
+  const isAskCodiConnected = askCodiAuthStatus?.authenticated === true
+  const { data: askCodiModelsData } = trpc.askcodi.models.useQuery(undefined, {
+    enabled: hasAskCodiApiKey || isAskCodiConnected,
+    staleTime: 5 * 60 * 1000,
+  })
   const [thinkingEnabled, setThinkingEnabled] = useAtom(
     extendedThinkingEnabledAtom,
   )
@@ -347,6 +361,17 @@ export function NewChatForm({
   const storedCodexApiKey = useAtomValue(codexApiKeyAtom)
   const hasAppCodexApiKey = Boolean(normalizeCodexApiKey(storedCodexApiKey))
   const hiddenModels = useAtomValue(hiddenModelsAtom)
+  const askCodiModels = useMemo(
+    () => (askCodiModelsData || []).filter((m) => !hiddenModels.includes(m.id)),
+    [askCodiModelsData, hiddenModels],
+  )
+  const selectedAskCodiModel = useMemo(
+    () =>
+      askCodiModels.find((m) => m.id === lastSelectedAskCodiModelId) ||
+      askCodiModels[0] ||
+      { id: "", name: "AskCodi" },
+    [askCodiModels, lastSelectedAskCodiModelId],
+  )
   const codexUiModels = useMemo(
     () => {
       let models = hasAppCodexApiKey
@@ -401,11 +426,15 @@ export function NewChatForm({
     if (selectedAgent.id === "codex") {
       return `${selectedCodexModel.id}/${selectedCodexThinking}`
     }
+    if (selectedAgent.id === "askcodi") {
+      return selectedAskCodiModel.id
+    }
     return selectedModel?.id ?? "opus"
   }, [
     selectedAgent.id,
     selectedCodexModel.id,
     selectedCodexThinking,
+    selectedAskCodiModel.id,
     selectedModel?.id,
   ])
 
@@ -416,6 +445,10 @@ export function NewChatForm({
   const selectedModelLabel = useMemo(() => {
     if (selectedAgent.id === "codex") {
       return selectedCodexModel.name
+    }
+
+    if (selectedAgent.id === "askcodi") {
+      return selectedAskCodiModel.name || "AskCodi"
     }
 
     if (availableModels.isOffline && availableModels.hasOllama) {
@@ -434,6 +467,7 @@ export function NewChatForm({
   }, [
     selectedAgent.id,
     selectedCodexModel.name,
+    selectedAskCodiModel.name,
     availableModels.isOffline,
     availableModels.hasOllama,
     currentOllamaModel,
@@ -1873,13 +1907,10 @@ export function NewChatForm({
                         <AgentModelSelector
                           open={isModelDropdownOpen}
                           onOpenChange={setIsModelDropdownOpen}
-                          selectedAgentId={selectedAgent.id as "claude-code" | "codex"}
+                          selectedAgentId={selectedAgent.id as "claude-code" | "codex" | "askcodi"}
                           onSelectedAgentIdChange={(provider) => {
-                            if (provider === "claude-code") {
-                              setSelectedAgent(claudeAgent)
-                            } else {
-                              setSelectedAgent(enabledAgents.find((agent) => agent.id === "codex") || fallbackAgent)
-                            }
+                            const agent = enabledAgents.find((a) => a.id === provider)
+                            setSelectedAgent(agent || (provider === "claude-code" ? claudeAgent : fallbackAgent))
                             setLastSelectedAgentId(provider)
                           }}
                           selectedModelLabel={selectedModelLabel}
@@ -1928,6 +1959,14 @@ export function NewChatForm({
                             selectedThinking: selectedCodexThinking,
                             onSelectThinking: setLastSelectedCodexThinking,
                             isConnected: codexOnboardingCompleted,
+                          }}
+                          askcodi={{
+                            models: askCodiModels,
+                            selectedModelId: selectedAskCodiModel.id,
+                            onSelectModel: (modelId) => {
+                              setLastSelectedAskCodiModelId(modelId)
+                            },
+                            isConnected: isAskCodiConnected,
                           }}
                         />
                       </div>

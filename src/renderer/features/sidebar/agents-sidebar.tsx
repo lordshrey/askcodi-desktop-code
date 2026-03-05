@@ -1204,7 +1204,7 @@ const AutomationsButton = memo(function AutomationsButton() {
   const automationsEnabled = useAtomValue(betaAutomationsEnabledAtom)
 
   const handleClick = useCallback(() => {
-    window.desktopApi.openExternal("https://21st.dev/agents/app/automations")
+    window.desktopApi.openExternal("https://askcodi.com/agents/app/automations")
   }, [])
 
   if (!automationsEnabled) return null
@@ -1388,7 +1388,7 @@ const SidebarHeader = memo(function SidebarHeader({
                     </div>
                     <div className="min-w-0 flex-1 overflow-hidden">
                       <div className="text-sm font-medium text-foreground truncate">
-                        1Code
+                        AskCodi
                       </div>
                     </div>
                     {showOfflineFeatures && (

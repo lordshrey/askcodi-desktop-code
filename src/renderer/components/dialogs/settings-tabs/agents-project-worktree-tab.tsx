@@ -145,7 +145,7 @@ function ProjectDetail({ projectId }: { projectId: string }) {
   }, [projectName, projectId, renameMutation])
 
   // Local state
-  const [saveTarget, setSaveTarget] = useState<"cursor" | "1code">("1code")
+  const [saveTarget, setSaveTarget] = useState<"cursor" | "askcodi">("askcodi")
   const [commands, setCommands] = useState<string[]>([""])
   const [unixCommands, setUnixCommands] = useState<string[]>([])
   const [windowsCommands, setWindowsCommands] = useState<string[]>([])
@@ -158,7 +158,7 @@ function ProjectDetail({ projectId }: { projectId: string }) {
   // Sync from server data
   useEffect(() => {
     if (configData) {
-      const newSaveTarget = configData.source === "cursor" ? "cursor" : "1code"
+      const newSaveTarget = configData.source === "cursor" ? "cursor" : "askcodi"
       setSaveTarget(newSaveTarget)
 
       let newCommands: string[] = [""]
@@ -422,17 +422,17 @@ function ProjectDetail({ projectId }: { projectId: string }) {
               <Select
                 value={saveTarget}
                 onValueChange={(v) => {
-                  setSaveTarget(v as "cursor" | "1code")
+                  setSaveTarget(v as "cursor" | "askcodi")
                   pendingSaveRef.current = true
                 }}
               >
                 <SelectTrigger className="w-auto px-3">
                   <span className="text-sm font-mono">
-                    {saveTarget === "cursor" ? ".cursor/worktrees.json" : ".1code/worktree.json"}
+                    {saveTarget === "cursor" ? ".cursor/worktrees.json" : ".askcodi/worktree.json"}
                   </span>
                 </SelectTrigger>
                 <SelectContent>
-                  <SelectItem value="1code">.1code/worktree.json</SelectItem>
+                  <SelectItem value="askcodi">.askcodi/worktree.json</SelectItem>
                   {cursorExists && (
                     <SelectItem value="cursor">.cursor/worktrees.json</SelectItem>
                   )}

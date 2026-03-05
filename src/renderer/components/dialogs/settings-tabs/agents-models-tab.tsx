@@ -4,6 +4,8 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react"
 import { toast } from "sonner"
 import {
   agentsLoginModalOpenAtom,
+  askCodiApiKeyAtom,
+  askCodiLoginModalOpenAtom,
   claudeLoginModalConfigAtom,
   codexApiKeyAtom,
   codexLoginModalOpenAtom,
@@ -268,6 +270,7 @@ export function AgentsModelsTab() {
   const setClaudeLoginModalConfig = useSetAtom(claudeLoginModalConfigAtom)
   const setClaudeLoginModalOpen = useSetAtom(agentsLoginModalOpenAtom)
   const setCodexLoginModalOpen = useSetAtom(codexLoginModalOpenAtom)
+  const setAskCodiLoginModalOpen = useSetAtom(askCodiLoginModalOpenAtom)
   const isNarrowScreen = useIsNarrowScreen()
   const { data: claudeCodeIntegration, isLoading: isClaudeCodeLoading } =
     trpc.claudeCode.getIntegration.useQuery()
@@ -285,6 +288,14 @@ export function AgentsModelsTab() {
   const [openaiKey, setOpenaiKey] = useState(storedOpenAIKey)
   const setOpenAIKeyMutation = trpc.voice.setOpenAIKey.useMutation()
   const codexLogoutMutation = trpc.codex.logout.useMutation()
+
+  // AskCodi state
+  const [storedAskCodiApiKey, setStoredAskCodiApiKey] = useAtom(askCodiApiKeyAtom)
+  const [askCodiApiKey, setAskCodiApiKey] = useState(storedAskCodiApiKey)
+  const [isSavingAskCodiApiKey, setIsSavingAskCodiApiKey] = useState(false)
+  const { data: askCodiAuthStatus } = trpc.askcodi.getAuthStatus.useQuery()
+  const askCodiLogoutMutation = trpc.askcodi.logout.useMutation()
+
   const trpcUtils = trpc.useUtils()
 
   useEffect(() => {
@@ -300,6 +311,10 @@ export function AgentsModelsTab() {
   useEffect(() => {
     setCodexApiKey(storedCodexApiKey)
   }, [storedCodexApiKey])
+
+  useEffect(() => {
+    setAskCodiApiKey(storedAskCodiApiKey)
+  }, [storedAskCodiApiKey])
 
   const savedConfigRef = useRef(storedConfig)
 
@@ -371,6 +386,65 @@ export function AgentsModelsTab() {
       toast.error(message)
     }
   }
+
+  const handleAskCodiSetup = () => {
+    setAskCodiLoginModalOpen(true)
+  }
+
+  const handleAskCodiLogout = async () => {
+    const confirmed = window.confirm("Disconnect AskCodi?")
+    if (!confirmed) return
+
+    try {
+      await askCodiLogoutMutation.mutateAsync()
+      setStoredAskCodiApiKey("")
+      setAskCodiApiKey("")
+      await trpcUtils.askcodi.getAuthStatus.invalidate()
+      await trpcUtils.askcodi.models.invalidate()
+      toast.success("AskCodi disconnected")
+    } catch (err) {
+      const message = err instanceof Error ? err.message : "Failed to disconnect AskCodi"
+      toast.error(message)
+    }
+  }
+
+  const handleAskCodiApiKeyBlur = async () => {
+    const trimmed = askCodiApiKey.trim()
+    if (trimmed === storedAskCodiApiKey) return
+    if (!trimmed) return
+
+    setIsSavingAskCodiApiKey(true)
+    try {
+      setStoredAskCodiApiKey(trimmed)
+      setAskCodiApiKey(trimmed)
+      await trpcUtils.askcodi.getAuthStatus.invalidate()
+      await trpcUtils.askcodi.models.invalidate()
+      toast.success("AskCodi API key saved")
+    } catch {
+      toast.error("Failed to save AskCodi API key")
+    } finally {
+      setIsSavingAskCodiApiKey(false)
+    }
+  }
+
+  const handleRemoveAskCodiApiKey = async () => {
+    setIsSavingAskCodiApiKey(true)
+    try {
+      await askCodiLogoutMutation.mutateAsync()
+      setStoredAskCodiApiKey("")
+      setAskCodiApiKey("")
+      await trpcUtils.askcodi.getAuthStatus.invalidate()
+      await trpcUtils.askcodi.models.invalidate()
+      toast.success("AskCodi API key removed")
+    } catch {
+      toast.error("Failed to remove AskCodi API key")
+    } finally {
+      setIsSavingAskCodiApiKey(false)
+    }
+  }
+
+  const hasAskCodiApiKey = Boolean(storedAskCodiApiKey.trim())
+  const isAskCodiConnected = askCodiAuthStatus?.authenticated === true
 
   const normalizedStoredCodexApiKey = normalizeCodexApiKey(storedCodexApiKey)
   const hasAppCodexApiKey = Boolean(normalizedStoredCodexApiKey)
@@ -483,17 +557,26 @@ export function AgentsModelsTab() {
     }
   }
 
+  // Fetch AskCodi models
+  const { data: askCodiModelsData } = trpc.askcodi.models.useQuery(undefined, {
+    enabled: hasAskCodiApiKey || isAskCodiConnected,
+    staleTime: 5 * 60 * 1000,
+  })
+
   // All models merged into one list for the top section
   const allModels = useMemo(() => {
-    const items: { id: string; name: string; provider: "claude" | "codex" }[] = []
+    const items: { id: string; name: string; provider: "claude" | "codex" | "askcodi" }[] = []
     for (const m of CLAUDE_MODELS) {
       items.push({ id: m.id, name: `${m.name} ${m.version}`, provider: "claude" })
     }
     for (const m of CODEX_MODELS) {
       items.push({ id: m.id, name: m.name, provider: "codex" })
     }
+    for (const m of (askCodiModelsData || [])) {
+      items.push({ id: m.id, name: m.name, provider: "askcodi" })
+    }
     return items
-  }, [])
+  }, [askCodiModelsData])
 
   const [modelSearch, setModelSearch] = useState("")
   const filteredModels = useMemo(() => {
@@ -542,6 +625,10 @@ export function AgentsModelsTab() {
                     <span className="text-sm font-medium">{m.name}</span>
                     {m.provider === "claude" ? (
                       <ClaudeCodeIcon className="h-3.5 w-3.5 text-muted-foreground" />
+                    ) : m.provider === "askcodi" ? (
+                      <svg viewBox="0 0 24 24" fill="currentColor" className="h-3.5 w-3.5 text-muted-foreground">
+                        <path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm-1 17.93c-3.95-.49-7-3.85-7-7.93 0-.62.08-1.21.21-1.79L9 15v1c0 1.1.9 2 2 2v1.93zm6.9-2.54c-.26-.81-1-1.39-1.9-1.39h-1v-3c0-.55-.45-1-1-1H8v-2h2c.55 0 1-.45 1-1V7h2c1.1 0 2-.9 2-2v-.41c2.93 1.19 5 4.06 5 7.41 0 2.08-.8 3.97-2.1 5.39z" />
+                      </svg>
                     ) : (
                       <CodexIcon className="h-3.5 w-3.5 text-muted-foreground" />
                     )}
@@ -651,6 +738,58 @@ export function AgentsModelsTab() {
         </div>
       </div>
 
+      {/* ===== AskCodi Account Section ===== */}
+      <div className="space-y-2">
+        <div className="pb-2 flex items-center justify-between">
+          <div>
+            <h4 className="text-sm font-medium text-foreground">
+              AskCodi Account
+            </h4>
+            <p className="text-xs text-muted-foreground">
+              Manage your AskCodi API connection
+            </p>
+          </div>
+        </div>
+
+        <div className="bg-background rounded-lg border border-border overflow-hidden divide-y divide-border">
+          <div className="flex items-center justify-between gap-6 p-4 hover:bg-muted/50">
+            <div>
+              <div className="text-sm font-medium">AskCodi API</div>
+              <div className="text-xs text-muted-foreground">
+                {isAskCodiConnected ? "Connected" : "Not connected"}
+              </div>
+            </div>
+
+            <div className="flex items-center gap-2">
+              {isAskCodiConnected && (
+                <Badge variant="secondary" className="text-xs">
+                  Active
+                </Badge>
+              )}
+              {isAskCodiConnected ? (
+                <Button
+                  size="sm"
+                  variant="ghost"
+                  onClick={() => void handleAskCodiLogout()}
+                  disabled={askCodiLogoutMutation.isPending}
+                >
+                  {askCodiLogoutMutation.isPending ? "..." : "Logout"}
+                </Button>
+              ) : (
+                <Button
+                  size="sm"
+                  variant="ghost"
+                  onClick={handleAskCodiSetup}
+                  disabled={isSavingAskCodiApiKey}
+                >
+                  Connect
+                </Button>
+              )}
+            </div>
+          </div>
+        </div>
+      </div>
+
       {/* ===== API Keys Section (Collapsible) ===== */}
       <Collapsible open={isApiKeysOpen} onOpenChange={setIsApiKeysOpen}>
         <CollapsibleTrigger className="flex items-center gap-1.5 text-sm font-medium text-foreground hover:text-foreground/80 transition-colors">
@@ -690,6 +829,47 @@ export function AgentsModelsTab() {
                     onClick={() => void handleRemoveCodexApiKey()}
                     disabled={isSavingCodexApiKey}
                     aria-label="Remove Codex API key"
+                    className="text-muted-foreground hover:text-red-600 hover:bg-red-500/10"
+                  >
+                    <Trash2 className="h-4 w-4" />
+                  </Button>
+                )}
+              </div>
+            </div>
+          </div>
+
+          {/* AskCodi API Key */}
+          <div className="bg-background rounded-lg border border-border overflow-hidden">
+            <div className="flex items-center justify-between gap-6 p-4">
+              <div className="flex-1">
+                <div className="flex items-center gap-2">
+                  <Label className="text-sm font-medium">AskCodi API Key</Label>
+                  {hasAskCodiApiKey && (
+                    <Badge variant="secondary" className="text-xs">
+                      Active
+                    </Badge>
+                  )}
+                </div>
+                <p className="text-xs text-muted-foreground">
+                  API key for AskCodi models
+                </p>
+              </div>
+              <div className="flex-shrink-0 w-80 flex items-center gap-2">
+                <Input
+                  type="password"
+                  value={askCodiApiKey}
+                  onChange={(e) => setAskCodiApiKey(e.target.value)}
+                  onBlur={() => void handleAskCodiApiKeyBlur()}
+                  className="w-full font-mono"
+                  placeholder="Enter your API key..."
+                />
+                {hasAskCodiApiKey && (
+                  <Button
+                    size="icon"
+                    variant="ghost"
+                    onClick={() => void handleRemoveAskCodiApiKey()}
+                    disabled={isSavingAskCodiApiKey}
+                    aria-label="Remove AskCodi API key"
                     className="text-muted-foreground hover:text-red-600 hover:bg-red-500/10"
                   >
                     <Trash2 className="h-4 w-4" />

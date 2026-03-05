@@ -122,6 +122,7 @@ import {
   filteredSubChatIdAtom,
   isCreatingPrAtom,
   justCreatedIdsAtom,
+  lastSelectedAgentIdAtom,
   loadingSubChatsAtom,
   MODEL_ID_MAP,
   pendingAuthRetryMessageAtom,
@@ -169,6 +170,7 @@ import { usePastedTextFiles, type PastedTextFile } from "../hooks/use-pasted-tex
 import { useTextContextSelection } from "../hooks/use-text-context-selection"
 import { useToggleFocusOnCmdEsc } from "../hooks/use-toggle-focus-on-cmd-esc"
 import { ACPChatTransport } from "../lib/acp-chat-transport"
+import { AskCodiChatTransport } from "../lib/askcodi-chat-transport"
 import { formatHistoryForContext } from "../lib/export-chat"
 import {
   clearSubChatDraft,
@@ -5304,11 +5306,13 @@ export function ChatView({
   const [
     subChatProviderOverrides,
     setSubChatProviderOverrides,
-  ] = useState<Record<string, "claude-code" | "codex">>({})
+  ] = useState<Record<string, "claude-code" | "codex" | "askcodi">>({})
 
   useEffect(() => {
     setSubChatProviderOverrides({})
   }, [chatId])
+
+  const lastSelectedAgentId = useAtomValue(lastSelectedAgentIdAtom)
 
   // Clear sub-chat "unseen changes" indicator when sub-chat becomes active
   useEffect(() => {
@@ -6377,11 +6381,11 @@ Make sure to preserve all functionality from both branches when resolving confli
   }, [agentSubChats, activeSubChatIdForPlan, setCurrentPlanPath])
 
   const inferProviderFromMessages = useCallback(
-    (subChatId?: string): "claude-code" | "codex" => {
-      if (!subChatId) return "claude-code"
+    (subChatId?: string): "claude-code" | "codex" | "askcodi" => {
+      if (!subChatId) return (lastSelectedAgentId as "claude-code" | "codex" | "askcodi") || "claude-code"
 
       const override = subChatProviderOverrides[subChatId]
-      if (override) return override
+      if (override) return override as "claude-code" | "codex" | "askcodi"
 
       const subChat = ((agentChat as any)?.subChats || []).find(
         (sc: any) => sc?.id === subChatId,
@@ -6401,7 +6405,11 @@ Make sure to preserve all functionality from both branches when resolving confli
       }
 
       for (const message of messages) {
-        const model = (message as any)?.metadata?.model
+        const metadata = (message as any)?.metadata
+        // Check explicit provider field first
+        if (metadata?.provider === "askcodi") return "askcodi"
+
+        const model = metadata?.model
         if (typeof model !== "string") continue
         const normalizedModel = model.toLowerCase()
         if (
@@ -6412,9 +6420,9 @@ Make sure to preserve all functionality from both branches when resolving confli
         }
       }
 
-      return "claude-code"
+      return (lastSelectedAgentId as "claude-code" | "codex" | "askcodi") || "claude-code"
     },
-    [agentChat, subChatProviderOverrides],
+    [agentChat, subChatProviderOverrides, lastSelectedAgentId],
   )
 
   const activeSubChatProvider = useMemo(
@@ -6575,10 +6583,12 @@ Make sure to preserve all functionality from both branches when resolving confli
         const overrideProvider = subChatProviderOverrides[subChatId]
         if (!overrideProvider) return existing
 
-        const existingProvider: "claude-code" | "codex" =
-          (existing as any)?.transport instanceof ACPChatTransport
-            ? "codex"
-            : "claude-code"
+        const existingProvider: "claude-code" | "codex" | "askcodi" =
+          (existing as any)?.transport instanceof AskCodiChatTransport
+            ? "askcodi"
+            : (existing as any)?.transport instanceof ACPChatTransport
+              ? "codex"
+              : "claude-code"
         if (existingProvider === overrideProvider) return existing
 
         const subChatForOverride = agentSubChats.find((sc) => sc.id === subChatId)
@@ -6632,7 +6642,7 @@ Make sure to preserve all functionality from both branches when resolving confli
         worktreePath: worktreePath ? "exists" : "none",
       })
 
-      let transport: IPCChatTransport | RemoteChatTransport | ACPChatTransport | null = null
+      let transport: IPCChatTransport | RemoteChatTransport | ACPChatTransport | AskCodiChatTransport | null = null
 
       if (isRemoteChat && chatSandboxUrl) {
         // Remote sandbox chat: use HTTP SSE transport
@@ -6652,7 +6662,17 @@ Make sure to preserve all functionality from both branches when resolving confli
           model: modelString,
         })
       } else if (worktreePath) {
-        if (chatProvider === "codex") {
+        if (chatProvider === "askcodi") {
+          console.log("[getOrCreateChat] Using AskCodiChatTransport", { provider: chatProvider })
+          transport = new AskCodiChatTransport({
+            chatId,
+            subChatId,
+            cwd: worktreePath,
+            projectPath,
+            mode: subChatMode,
+            provider: "askcodi",
+          })
+        } else if (chatProvider === "codex") {
           console.log("[getOrCreateChat] Using ACPChatTransport", { provider: chatProvider })
           transport = new ACPChatTransport({
             chatId,
@@ -6917,7 +6937,7 @@ Make sure to preserve all functionality from both branches when resolving confli
     })
 
     const chatProvider = newSubChatProvider
-    let newSubChatTransport: IPCChatTransport | RemoteChatTransport | ACPChatTransport | null = null
+    let newSubChatTransport: IPCChatTransport | RemoteChatTransport | ACPChatTransport | AskCodiChatTransport | null = null
 
     if (isNewSubChatRemote && newSubChatSandboxUrl) {
       // Remote sandbox chat: use HTTP SSE transport
@@ -6933,7 +6953,17 @@ Make sure to preserve all functionality from both branches when resolving confli
         model: modelString,
       })
     } else if (worktreePath) {
-      if (chatProvider === "codex") {
+      if (chatProvider === "askcodi") {
+        console.log("[createNewSubChat] Using AskCodiChatTransport", { provider: chatProvider })
+        newSubChatTransport = new AskCodiChatTransport({
+          chatId,
+          subChatId: newId,
+          cwd: worktreePath,
+          projectPath,
+          mode: newSubChatMode,
+          provider: "askcodi",
+        })
+      } else if (chatProvider === "codex") {
         console.log("[createNewSubChat] Using ACPChatTransport", { provider: chatProvider })
         newSubChatTransport = new ACPChatTransport({
           chatId,
@@ -7325,7 +7355,8 @@ Make sure to preserve all functionality from both branches when resolving confli
         userMessage,
         isFirstSubChat: isFirst,
         generateName: async (msg) => {
-          return generateSubChatNameMutation.mutateAsync({ userMessage: msg, ollamaModel: selectedOllamaModel })
+          const provider = inferProviderFromMessages(subChatId)
+          return generateSubChatNameMutation.mutateAsync({ userMessage: msg, ollamaModel: selectedOllamaModel, provider })
         },
         renameSubChat: async (input) => {
           await renameSubChatMutation.mutateAsync(input)
@@ -7402,6 +7433,7 @@ Make sure to preserve all functionality from both branches when resolving confli
       renameChatMutation,
       selectedTeamId,
       selectedOllamaModel,
+      inferProviderFromMessages,
       utils.agents.getAgentChats,
       utils.agents.getAgentChat,
     ],
