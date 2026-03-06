@@ -182,6 +182,9 @@ ${truncatedBody}`
         name: chatName,
         projectId: input.projectId,
         worktreePath: project.path,
+        sourceUrl: input.sourceUrl,
+        sourceType: input.sourceType,
+        sourceIdentifier: input.sourceIdentifier,
       }).run()
 
       // Create sub-chat with initial message in AI SDK format

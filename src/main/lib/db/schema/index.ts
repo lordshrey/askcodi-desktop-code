@@ -54,8 +54,13 @@ export const chats = sqliteTable("chats", {
   // PR tracking fields
   prUrl: text("pr_url"),
   prNumber: integer("pr_number"),
+  // Source tracking (links chat to external task)
+  sourceUrl: text("source_url"),
+  sourceType: text("source_type"),        // "github-issue" | "github-pr" | "linear-ticket"
+  sourceIdentifier: text("source_identifier"), // "#42" or "ENG-123"
 }, (table) => [
   index("chats_worktree_path_idx").on(table.worktreePath),
+  index("chats_source_url_idx").on(table.sourceUrl),
 ])
 
 export const chatsRelations = relations(chats, ({ one, many }) => ({

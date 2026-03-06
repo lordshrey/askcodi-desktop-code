@@ -100,6 +100,7 @@ export function WorkOnTaskDialog({
 
   const createMutation = trpc.tasks.createFromExternal.useMutation()
   const createSubChatMutation = trpc.chats.createSubChat.useMutation()
+  const setSourceFieldsMutation = trpc.chats.setSourceFields.useMutation()
 
   const handleSubmit = useCallback(async () => {
     if (!selectedProjectId) return
@@ -158,6 +159,14 @@ ${truncatedBody}`
           provider: selectedProvider,
         })
 
+        // Link existing workspace to this task if not already linked
+        await setSourceFieldsMutation.mutateAsync({
+          chatId: existingChatId,
+          sourceUrl,
+          sourceType,
+          sourceIdentifier,
+        }).catch(() => {}) // non-critical, don't block on failure
+
         // Tell the chat component to activate this new sub-chat tab
         setPendingActiveSubChatId(newSubChat.id)
         await utils.chats.get.invalidate({ id: existingChatId })
@@ -185,6 +194,7 @@ ${truncatedBody}`
     selectedProvider,
     createMutation,
     createSubChatMutation,
+    setSourceFieldsMutation,
     utils,
     setPendingActiveSubChatId,
     setSelectedChatId,

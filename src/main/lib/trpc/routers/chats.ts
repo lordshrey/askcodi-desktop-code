@@ -2215,4 +2215,55 @@ export const chatsRouter = router({
         subChatCount: chatSubChats.length,
       }
     }),
+
+  /**
+   * Batch lookup chats by source URLs (for task status badges)
+   */
+  getBySourceUrls: publicProcedure
+    .input(z.object({ sourceUrls: z.array(z.string()) }))
+    .query(({ input }) => {
+      if (input.sourceUrls.length === 0) return []
+      const db = getDatabase()
+      return db
+        .select({
+          id: chats.id,
+          name: chats.name,
+          sourceUrl: chats.sourceUrl,
+          sourceIdentifier: chats.sourceIdentifier,
+        })
+        .from(chats)
+        .where(
+          and(
+            inArray(chats.sourceUrl, input.sourceUrls),
+            isNull(chats.archivedAt),
+          ),
+        )
+        .all()
+    }),
+
+  /**
+   * Set source tracking fields on a chat (links it to an external task)
+   */
+  setSourceFields: publicProcedure
+    .input(
+      z.object({
+        chatId: z.string(),
+        sourceUrl: z.string(),
+        sourceType: z.enum(["github-issue", "github-pr", "linear-ticket"]),
+        sourceIdentifier: z.string(),
+      }),
+    )
+    .mutation(({ input }) => {
+      const db = getDatabase()
+      return db
+        .update(chats)
+        .set({
+          sourceUrl: input.sourceUrl,
+          sourceType: input.sourceType,
+          sourceIdentifier: input.sourceIdentifier,
+        })
+        .where(eq(chats.id, input.chatId))
+        .returning()
+        .get()
+    }),
 })
