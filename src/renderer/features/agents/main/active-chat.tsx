@@ -132,8 +132,10 @@ import {
   type PendingChatHistory,
   pendingMentionAtom,
   pendingPlanApprovalsAtom,
+  pendingActiveSubChatIdAtom,
   pendingPrMessageAtom,
   pendingReviewMessageAtom,
+  pendingTaskMessageAtom,
   pendingUserQuestionsAtom,
   planEditRefetchTriggerAtomFamily,
   planSidebarOpenAtomFamily,
@@ -2682,6 +2684,20 @@ const ChatViewInner = memo(function ChatViewInner({
       })
     }
   }, [pendingConflictMessage, isStreaming, sendMessage, setPendingConflictMessage, subChatId])
+
+  // Watch for pending task message and send it (from AddToWorkspaceDialog)
+  const [pendingTaskMessage, setPendingTaskMessage] = useAtom(pendingTaskMessageAtom)
+
+  useEffect(() => {
+    if (pendingTaskMessage?.subChatId === subChatId && !isStreaming) {
+      setPendingTaskMessage(null)
+
+      sendMessage({
+        role: "user",
+        parts: [{ type: "text", text: pendingTaskMessage.message }],
+      })
+    }
+  }, [pendingTaskMessage, isStreaming, sendMessage, setPendingTaskMessage, subChatId])
 
   // Handle pending "Build plan" from sidebar (atom - effect is defined after handleApprovePlan)
   const [pendingBuildPlanSubChatId, setPendingBuildPlanSubChatId] = useAtom(
@@ -6264,6 +6280,20 @@ Make sure to preserve all functionality from both branches when resolving confli
       }
     }
   }, [agentChat, chatId])
+
+  // Activate a pending sub-chat (e.g. from "Add to workspace" in Tasks view)
+  const [pendingActiveSubChatId, setPendingActiveSubChatId] = useAtom(pendingActiveSubChatIdAtom)
+  useEffect(() => {
+    if (!pendingActiveSubChatId || !agentChat) return
+    // Check if the pending sub-chat belongs to this workspace
+    const found = agentSubChats.some(sc => sc.id === pendingActiveSubChatId)
+    if (found) {
+      const store = useAgentSubChatStore.getState()
+      store.addToOpenSubChats(pendingActiveSubChatId)
+      store.setActiveSubChat(pendingActiveSubChatId)
+      setPendingActiveSubChatId(null)
+    }
+  }, [pendingActiveSubChatId, agentChat, agentSubChats, setPendingActiveSubChatId])
 
   // Auto-detect plan path from ACTIVE sub-chat messages when sub-chat changes
   // This ensures the plan sidebar shows the correct plan for the active sub-chat only

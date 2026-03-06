@@ -734,6 +734,14 @@ export const pendingPrMessageAtom = atom<{ message: string; subChatId: string } 
 // Set by ChatView when "Review" is clicked, consumed by ChatViewInner
 export const pendingReviewMessageAtom = atom<{ message: string; subChatId: string } | null>(null)
 
+// Pending task message to send to an existing chat
+// Set by AddToWorkspaceDialog, consumed by ChatViewInner
+export const pendingTaskMessageAtom = atom<{ message: string; subChatId: string } | null>(null)
+
+// Pending sub-chat to activate when navigating to a workspace
+// Set by WorkOnTaskDialog (existing workspace mode), consumed by ChatView store init
+export const pendingActiveSubChatIdAtom = atom<string | null>(null)
+
 // Pending merge conflict resolution message to send to chat
 // Set when user clicks "Fix Conflicts" button, consumed by ChatViewInner
 export const pendingConflictResolutionMessageAtom = atom<{ message: string; subChatId: string } | null>(null)

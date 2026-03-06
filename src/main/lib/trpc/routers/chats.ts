@@ -719,17 +719,33 @@ export const chatsRouter = router({
         chatId: z.string(),
         name: z.string().optional(),
         mode: z.enum(["plan", "agent"]).default("agent"),
+        initialMessage: z.string().optional(),
+        provider: z.enum(["claude-code", "codex", "askcodi"]).optional(),
       }),
     )
     .mutation(({ input }) => {
       const db = getDatabase()
+
+      let messages = "[]"
+      if (input.initialMessage) {
+        const metadata: Record<string, string> = {}
+        if (input.provider) metadata.provider = input.provider
+
+        messages = JSON.stringify([{
+          id: `msg-${Date.now()}`,
+          role: "user",
+          parts: [{ type: "text", text: input.initialMessage }],
+          ...(Object.keys(metadata).length > 0 ? { metadata } : {}),
+        }])
+      }
+
       return db
         .insert(subChats)
         .values({
           chatId: input.chatId,
           name: input.name,
           mode: input.mode,
-          messages: "[]",
+          messages,
         })
         .returning()
         .get()

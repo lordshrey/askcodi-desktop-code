@@ -139,6 +139,8 @@ export const tasksRouter = router({
       sourceType: z.enum(["github-issue", "github-pr", "linear-ticket"]),
       sourceIdentifier: z.string(),
       additionalInstructions: z.string().optional(),
+      model: z.string().optional(),
+      provider: z.enum(["claude-code", "codex", "askcodi"]).optional(),
     }))
     .mutation(({ input }) => {
       const db = getDatabase()
@@ -174,17 +176,24 @@ ${truncatedBody}`
       const subChatId = createId()
       const chatName = `[${input.sourceIdentifier}] ${input.title}`.slice(0, 100)
 
-      // Create chat
+      // Create chat with worktreePath set to project path so the agent can start
       db.insert(chats).values({
         id: chatId,
         name: chatName,
         projectId: input.projectId,
+        worktreePath: project.path,
       }).run()
 
-      // Create sub-chat with initial message as the first user message
+      // Create sub-chat with initial message in AI SDK format
+      const metadata: Record<string, string> = {}
+      if (input.model) metadata.model = input.model
+      if (input.provider) metadata.provider = input.provider
+
       const messages = JSON.stringify([{
+        id: `msg-${Date.now()}`,
         role: "user",
-        content: initialMessage,
+        parts: [{ type: "text", text: initialMessage }],
+        ...(Object.keys(metadata).length > 0 ? { metadata } : {}),
       }])
 
       db.insert(subChats).values({

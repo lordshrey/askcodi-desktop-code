@@ -1,7 +1,7 @@
-import { useState, useCallback } from "react"
+import { useState, useCallback, useMemo } from "react"
 import { useSetAtom, useAtomValue } from "jotai"
 import { trpc } from "../../lib/trpc"
-import { selectedAgentChatIdAtom, desktopViewAtom, selectedProjectAtom } from "../agents/atoms"
+import { selectedAgentChatIdAtom, desktopViewAtom, selectedProjectAtom, lastSelectedAgentIdAtom, pendingActiveSubChatIdAtom } from "../agents/atoms"
 import {
   Dialog,
   DialogContent,
@@ -12,6 +12,17 @@ import {
 } from "../../components/ui/dialog"
 import { Button } from "../../components/ui/button"
 import { Loader2 } from "lucide-react"
+import { cn } from "../../lib/utils"
+import { CLAUDE_MODELS, CODEX_MODELS } from "../agents/lib/models"
+
+type ProviderId = "claude-code" | "codex" | "askcodi"
+type WorkspaceMode = "new" | "existing"
+
+const PROVIDER_OPTIONS: { id: ProviderId; label: string }[] = [
+  { id: "askcodi", label: "AskCodi" },
+  { id: "claude-code", label: "Claude Code" },
+  { id: "codex", label: "Codex" },
+]
 
 interface WorkOnTaskDialogProps {
   open: boolean
@@ -34,41 +45,152 @@ export function WorkOnTaskDialog({
 }: WorkOnTaskDialogProps) {
   const { data: projectsList } = trpc.projects.list.useQuery()
   const selectedProject = useAtomValue(selectedProjectAtom)
+  const lastSelectedAgentId = useAtomValue(lastSelectedAgentIdAtom)
   const setSelectedChatId = useSetAtom(selectedAgentChatIdAtom)
   const setDesktopView = useSetAtom(desktopViewAtom)
+  const setPendingActiveSubChatId = useSetAtom(pendingActiveSubChatIdAtom)
+  const utils = trpc.useUtils()
 
+  const [workspaceMode, setWorkspaceMode] = useState<WorkspaceMode>("new")
   const [selectedProjectId, setSelectedProjectId] = useState<string>(
     selectedProject?.id ?? ""
   )
+  const [existingChatId, setExistingChatId] = useState<string>("")
+  const [selectedProvider, setSelectedProvider] = useState<ProviderId>(
+    (lastSelectedAgentId as ProviderId) || "askcodi"
+  )
+  const [selectedModelId, setSelectedModelId] = useState<string>("")
   const [additionalInstructions, setAdditionalInstructions] = useState("")
-  const [isCreating, setIsCreating] = useState(false)
+  const [isSubmitting, setIsSubmitting] = useState(false)
+
+  // Fetch existing chats for "existing workspace" mode
+  const { data: chatsList } = trpc.chats.list.useQuery(
+    { projectId: selectedProjectId },
+    { enabled: !!selectedProjectId && workspaceMode === "existing" }
+  )
+
+  // Fetch AskCodi models
+  const { data: askCodiModelsData } = trpc.askcodi.models.useQuery(undefined, {
+    enabled: selectedProvider === "askcodi",
+    staleTime: 5 * 60 * 1000,
+  })
+
+  // Model options based on selected provider
+  const modelOptions = useMemo(() => {
+    switch (selectedProvider) {
+      case "claude-code":
+        return CLAUDE_MODELS.map((m) => ({ id: m.id, label: `${m.name} ${m.version}` }))
+      case "codex":
+        return CODEX_MODELS.map((m) => ({ id: m.id, label: m.name }))
+      case "askcodi":
+        return (askCodiModelsData ?? []).map((m: { id: string; name: string }) => ({
+          id: m.id,
+          label: m.name,
+        }))
+      default:
+        return []
+    }
+  }, [selectedProvider, askCodiModelsData])
+
+  // Reset model when provider changes
+  const handleProviderChange = useCallback((provider: ProviderId) => {
+    setSelectedProvider(provider)
+    setSelectedModelId("")
+  }, [])
 
   const createMutation = trpc.tasks.createFromExternal.useMutation()
+  const createSubChatMutation = trpc.chats.createSubChat.useMutation()
 
-  const handleCreate = useCallback(async () => {
+  const handleSubmit = useCallback(async () => {
     if (!selectedProjectId) return
-    setIsCreating(true)
-    try {
-      const result = await createMutation.mutateAsync({
-        projectId: selectedProjectId,
-        title,
-        body,
-        sourceUrl,
-        sourceType,
-        sourceIdentifier,
-        additionalInstructions: additionalInstructions.trim() || undefined,
-      })
+    if (workspaceMode === "existing" && !existingChatId) return
+    setIsSubmitting(true)
 
-      // Navigate to the new chat
-      setSelectedChatId(result.chatId)
-      setDesktopView(null) // Return to chat view
+    try {
+      const effectiveModel = selectedModelId || undefined
+
+      if (workspaceMode === "new") {
+        // Create new workspace
+        const result = await createMutation.mutateAsync({
+          projectId: selectedProjectId,
+          title,
+          body,
+          sourceUrl,
+          sourceType,
+          sourceIdentifier,
+          additionalInstructions: additionalInstructions.trim() || undefined,
+          provider: selectedProvider,
+          model: effectiveModel,
+        })
+
+        setSelectedChatId(result.chatId)
+      } else {
+        // Add as new sub-chat to existing workspace
+        const sourceLabel =
+          sourceType === "github-issue"
+            ? "GitHub Issue"
+            : sourceType === "github-pr"
+              ? "Pull Request"
+              : "Linear Ticket"
+
+        const truncatedBody =
+          body.length > 4000 ? body.slice(0, 4000) + "\n\n... (truncated)" : body
+
+        let taskMessage = `Work on the following ${sourceLabel}:
+
+## ${title} (${sourceIdentifier})
+**Source:** ${sourceUrl}
+
+## Description
+${truncatedBody}`
+
+        if (additionalInstructions.trim()) {
+          taskMessage += `\n\n---\n${additionalInstructions.trim()}`
+        }
+
+        taskMessage += `\n\nAnalyze this and implement the necessary changes.`
+
+        const newSubChat = await createSubChatMutation.mutateAsync({
+          chatId: existingChatId,
+          name: `[${sourceIdentifier}] ${title}`.slice(0, 100),
+          mode: "agent",
+          initialMessage: taskMessage,
+          provider: selectedProvider,
+        })
+
+        // Tell the chat component to activate this new sub-chat tab
+        setPendingActiveSubChatId(newSubChat.id)
+        await utils.chats.get.invalidate({ id: existingChatId })
+        setSelectedChatId(existingChatId)
+      }
+
+      setDesktopView(null)
       onOpenChange(false)
     } catch (err) {
       console.error("Failed to create workspace:", err)
     } finally {
-      setIsCreating(false)
+      setIsSubmitting(false)
     }
-  }, [selectedProjectId, title, body, sourceUrl, sourceType, sourceIdentifier, additionalInstructions, createMutation, setSelectedChatId, setDesktopView, onOpenChange])
+  }, [
+    selectedProjectId,
+    workspaceMode,
+    existingChatId,
+    selectedModelId,
+    title,
+    body,
+    sourceUrl,
+    sourceType,
+    sourceIdentifier,
+    additionalInstructions,
+    selectedProvider,
+    createMutation,
+    createSubChatMutation,
+    utils,
+    setPendingActiveSubChatId,
+    setSelectedChatId,
+    setDesktopView,
+    onOpenChange,
+  ])
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
@@ -81,12 +203,46 @@ export function WorkOnTaskDialog({
         </DialogHeader>
 
         <div className="space-y-4 py-2">
+          {/* New vs Existing workspace toggle */}
+          <div className="space-y-1.5">
+            <label className="text-xs font-medium text-foreground">Workspace</label>
+            <div className="flex gap-1 bg-muted rounded-md p-0.5">
+              <button
+                type="button"
+                onClick={() => setWorkspaceMode("new")}
+                className={cn(
+                  "flex-1 px-3 py-1.5 text-xs rounded-sm transition-colors",
+                  workspaceMode === "new"
+                    ? "bg-background text-foreground shadow-sm"
+                    : "text-muted-foreground hover:text-foreground"
+                )}
+              >
+                New workspace
+              </button>
+              <button
+                type="button"
+                onClick={() => setWorkspaceMode("existing")}
+                className={cn(
+                  "flex-1 px-3 py-1.5 text-xs rounded-sm transition-colors",
+                  workspaceMode === "existing"
+                    ? "bg-background text-foreground shadow-sm"
+                    : "text-muted-foreground hover:text-foreground"
+                )}
+              >
+                Existing workspace
+              </button>
+            </div>
+          </div>
+
           {/* Project selection */}
           <div className="space-y-1.5">
             <label className="text-xs font-medium text-foreground">Project</label>
             <select
               value={selectedProjectId}
-              onChange={(e) => setSelectedProjectId(e.target.value)}
+              onChange={(e) => {
+                setSelectedProjectId(e.target.value)
+                setExistingChatId("")
+              }}
               className="w-full bg-muted border border-border rounded-md px-2 py-1.5 text-sm"
             >
               <option value="">Select a project...</option>
@@ -95,6 +251,62 @@ export function WorkOnTaskDialog({
               ))}
             </select>
           </div>
+
+          {/* Existing workspace selector (only when "existing" mode) */}
+          {workspaceMode === "existing" && (
+            <div className="space-y-1.5">
+              <label className="text-xs font-medium text-foreground">Select workspace</label>
+              <select
+                value={existingChatId}
+                onChange={(e) => setExistingChatId(e.target.value)}
+                className="w-full bg-muted border border-border rounded-md px-2 py-1.5 text-sm"
+                disabled={!selectedProjectId}
+              >
+                <option value="">Select a workspace...</option>
+                {chatsList?.map((c) => (
+                  <option key={c.id} value={c.id}>
+                    {c.name || "Untitled"}
+                  </option>
+                ))}
+              </select>
+              {selectedProjectId && chatsList && chatsList.length === 0 && (
+                <p className="text-xs text-muted-foreground">
+                  No workspaces found. Switch to "New workspace" to create one.
+                </p>
+              )}
+            </div>
+          )}
+
+          {/* Provider selection */}
+          <div className="space-y-1.5">
+            <label className="text-xs font-medium text-foreground">AI Provider</label>
+            <select
+              value={selectedProvider}
+              onChange={(e) => handleProviderChange(e.target.value as ProviderId)}
+              className="w-full bg-muted border border-border rounded-md px-2 py-1.5 text-sm"
+            >
+              {PROVIDER_OPTIONS.map((p) => (
+                <option key={p.id} value={p.id}>{p.label}</option>
+              ))}
+            </select>
+          </div>
+
+          {/* Model selection */}
+          {modelOptions.length > 0 && (
+            <div className="space-y-1.5">
+              <label className="text-xs font-medium text-foreground">Model</label>
+              <select
+                value={selectedModelId}
+                onChange={(e) => setSelectedModelId(e.target.value)}
+                className="w-full bg-muted border border-border rounded-md px-2 py-1.5 text-sm"
+              >
+                <option value="">Default</option>
+                {modelOptions.map((m) => (
+                  <option key={m.id} value={m.id}>{m.label}</option>
+                ))}
+              </select>
+            </div>
+          )}
 
           {/* Additional instructions */}
           <div className="space-y-1.5">
@@ -116,11 +328,15 @@ export function WorkOnTaskDialog({
           </Button>
           <Button
             size="sm"
-            disabled={!selectedProjectId || isCreating}
-            onClick={handleCreate}
+            disabled={
+              !selectedProjectId ||
+              (workspaceMode === "existing" && !existingChatId) ||
+              isSubmitting
+            }
+            onClick={handleSubmit}
           >
-            {isCreating && <Loader2 className="h-3 w-3 animate-spin mr-1.5" />}
-            Create Workspace
+            {isSubmitting && <Loader2 className="h-3 w-3 animate-spin mr-1.5" />}
+            {workspaceMode === "new" ? "Create Workspace" : "Add to Workspace"}
           </Button>
         </DialogFooter>
       </DialogContent>
