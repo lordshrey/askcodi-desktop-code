@@ -35,12 +35,12 @@ import {
   subChatsQuickSwitchSelectedIndexAtom,
   ctrlTabTargetAtom,
   betaKanbanEnabledAtom,
-  betaAutomationsEnabledAtom,
+  betaTasksEnabledAtom,
   chatSourceModeAtom,
 } from "../../../lib/atoms"
 import { NewChatForm } from "../main/new-chat-form"
 import { KanbanView } from "../../kanban"
-import { AutomationsView, AutomationsDetailView, InboxView } from "../../automations"
+import { TasksView } from "../../tasks/tasks-view"
 import { ChatView } from "../main/active-chat"
 import { api } from "../../../lib/mock-api"
 import { trpc } from "../../../lib/trpc"
@@ -67,7 +67,6 @@ import { AlignJustify } from "lucide-react"
 import { AgentsQuickSwitchDialog } from "../components/agents-quick-switch-dialog"
 import { SubChatsQuickSwitchDialog } from "../components/subchats-quick-switch-dialog"
 import { isDesktopApp } from "../../../lib/utils/platform"
-import { remoteTrpc } from "../../../lib/remote-trpc"
 import { SettingsContent } from "../../settings/settings-content"
 // Desktop mock
 const useIsAdmin = () => false
@@ -82,7 +81,7 @@ export function AgentsContent() {
   const selectedDraftId = useAtomValue(selectedDraftIdAtom)
   const showNewChatForm = useAtomValue(showNewChatFormAtom)
   const betaKanbanEnabled = useAtomValue(betaKanbanEnabledAtom)
-  const [betaAutomationsEnabled, setBetaAutomationsEnabled] = useAtom(betaAutomationsEnabledAtom)
+  const betaTasksEnabled = useAtomValue(betaTasksEnabledAtom)
   const [selectedTeamId] = useAtom(selectedTeamIdAtom)
   const setBillingMethod = useSetAtom(billingMethodAtom)
   const setAnthropicOnboardingCompleted = useSetAtom(
@@ -184,24 +183,6 @@ export function AgentsContent() {
     enabled: !!selectedTeamId,
   })
   const selectedTeam = teams?.find((t: any) => t.id === selectedTeamId) as any
-
-  // Auto-activate automations & inbox if user has any automations configured
-  // One-shot check on app startup — no refetches, no polling
-  const { data: automationsData } = useQuery({
-    queryKey: ["automations", "autoActivateCheck", selectedTeamId],
-    queryFn: () => remoteTrpc.automations.listAutomations.query({ teamId: selectedTeamId! }),
-    enabled: !!selectedTeamId && !betaAutomationsEnabled,
-    staleTime: Infinity,
-    refetchOnWindowFocus: false,
-    refetchOnReconnect: false,
-    retry: 1,
-  })
-
-  useEffect(() => {
-    if (!betaAutomationsEnabled && automationsData && automationsData.length > 0) {
-      setBetaAutomationsEnabled(true)
-    }
-  }, [betaAutomationsEnabled, automationsData, setBetaAutomationsEnabled])
 
   // Fetch agent chats for keyboard navigation and mobile view
   const { data: agentChats } = api.agents.getAgentChats.useQuery(
@@ -860,15 +841,11 @@ export function AgentsContent() {
         data-agents-page
         data-mobile-view
       >
-        {/* Mobile: Settings/Automations/Inbox fullscreen views */}
+        {/* Mobile: Settings/Tasks fullscreen views */}
         {desktopView === "settings" ? (
           <SettingsContent />
-        ) : betaAutomationsEnabled && desktopView === "automations" ? (
-          <AutomationsView />
-        ) : betaAutomationsEnabled && desktopView === "automations-detail" ? (
-          <AutomationsDetailView />
-        ) : betaAutomationsEnabled && desktopView === "inbox" ? (
-          <InboxView />
+        ) : betaTasksEnabled && desktopView === "tasks" ? (
+          <TasksView />
         ) : mobileViewMode === "chats" ? (
           // Chats List Mode (default) - uses AgentsSidebar in fullscreen
           <AgentsSidebar
@@ -1002,12 +979,8 @@ export function AgentsContent() {
         >
           {desktopView === "settings" ? (
             <SettingsContent />
-          ) : betaAutomationsEnabled && desktopView === "automations" ? (
-            <AutomationsView />
-          ) : betaAutomationsEnabled && desktopView === "automations-detail" ? (
-            <AutomationsDetailView />
-          ) : betaAutomationsEnabled && desktopView === "inbox" ? (
-            <InboxView />
+          ) : betaTasksEnabled && desktopView === "tasks" ? (
+            <TasksView />
           ) : selectedChatId ? (
             <div className="h-full flex flex-col relative overflow-hidden">
               <ChatView

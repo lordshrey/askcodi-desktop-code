@@ -41,6 +41,7 @@ import {
 } from "./windows/main"
 import { windowManager } from "./windows/window-manager"
 
+import { exchangeGitHubCode, exchangeLinearCode } from "./lib/integrations/oauth"
 import { IS_DEV, AUTH_SERVER_PORT } from "./constants"
 
 // Deep link protocol (must match package.json build.protocols.schemes)
@@ -199,6 +200,28 @@ function handleDeepLink(url: string): void {
       const code = parsed.searchParams.get("code")
       if (code) {
         handleAuthCode(code)
+        return
+      }
+    }
+
+    // Handle GitHub OAuth callback: askcodi://oauth/github?code=xxx
+    if (parsed.pathname === "/oauth/github" || parsed.host === "oauth" && parsed.pathname === "/github") {
+      const code = parsed.searchParams.get("code")
+      if (code) {
+        exchangeGitHubCode(code)
+          .then(() => console.log("[DeepLink] GitHub OAuth success"))
+          .catch((err) => console.error("[DeepLink] GitHub OAuth error:", err))
+        return
+      }
+    }
+
+    // Handle Linear OAuth callback: askcodi://oauth/linear?code=xxx
+    if (parsed.pathname === "/oauth/linear" || parsed.host === "oauth" && parsed.pathname === "/linear") {
+      const code = parsed.searchParams.get("code")
+      if (code) {
+        exchangeLinearCode(code)
+          .then(() => console.log("[DeepLink] Linear OAuth success"))
+          .catch((err) => console.error("[DeepLink] Linear OAuth error:", err))
         return
       }
     }
@@ -372,6 +395,51 @@ const server = createServer((req, res) => {
       <path fill-rule="evenodd" clip-rule="evenodd" d="M14.3333 0C15.2538 0 16 0.746192 16 1.66667V11.8333C16 11.9254 15.9254 12 15.8333 12H10.8333C10.7413 12 10.6667 12.0746 10.6667 12.1667V15.8333C10.6667 15.9254 10.592 16 10.5 16H1.66667C0.746192 16 0 15.2538 0 14.3333V12.1888C0 12.0717 0.0617409 11.9632 0.162081 11.903L6.15043 8.30986C6.28644 8.22833 6.24077 8.02716 6.09507 8.00256L6.06511 8H0.166667C0.0746186 8 0 7.92538 0 7.83333V4.16667C0 4.07462 0.0746193 4 0.166667 4H6.5C6.59205 4 6.66667 3.92538 6.66667 3.83333V0.166667C6.66667 0.0746193 6.74129 0 6.83333 0H14.3333ZM6.83333 4C6.74129 4 6.66667 4.07462 6.66667 4.16667V11.8333C6.66667 11.9254 6.74129 12 6.83333 12H10.5C10.592 12 10.6667 11.9254 10.6667 11.8333V4.16667C10.6667 4.07462 10.592 4 10.5 4H6.83333Z" fill="#0033FF"/>
     </svg>
     <h1>Authentication successful</h1>
+    <p>You can close this tab</p>
+  </div>
+  <script>setTimeout(() => window.close(), 1000)</script>
+</body>
+</html>`)
+      } else {
+        res.writeHead(400, { "Content-Type": "text/plain" })
+        res.end("Missing code parameter")
+      }
+    } else if (url.pathname === "/oauth/github" || url.pathname === "/oauth/linear") {
+      const code = url.searchParams.get("code")
+      const platform = url.pathname === "/oauth/github" ? "github" : "linear"
+      console.log(`[Auth Server] Received ${platform} OAuth callback`)
+
+      if (code) {
+        const exchangeFn = platform === "github" ? exchangeGitHubCode : exchangeLinearCode
+        exchangeFn(code)
+          .then(() => {
+            console.log(`[Auth Server] ${platform} OAuth exchange success`)
+            BrowserWindow.getAllWindows().forEach((win) => {
+              win.webContents.send("integration:connected", platform)
+            })
+          })
+          .catch((err) => console.error(`[Auth Server] ${platform} OAuth exchange error:`, err))
+
+        res.writeHead(200, { "Content-Type": "text/html" })
+        res.end(`<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="UTF-8">
+  <link rel="icon" type="image/svg+xml" href="${FAVICON_DATA_URI}">
+  <title>AskCodi - ${platform === "github" ? "GitHub" : "Linear"} Connected</title>
+  <style>
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+    :root { --bg: #09090b; --text: #fafafa; --text-muted: #71717a; }
+    @media (prefers-color-scheme: light) { :root { --bg: #ffffff; --text: #09090b; --text-muted: #71717a; } }
+    body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; display: flex; flex-direction: column; align-items: center; justify-content: center; min-height: 100vh; background: var(--bg); color: var(--text); }
+    .container { display: flex; flex-direction: column; align-items: center; gap: 8px; }
+    h1 { font-size: 14px; font-weight: 500; margin-bottom: 4px; }
+    p { font-size: 12px; color: var(--text-muted); }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <h1>${platform === "github" ? "GitHub" : "Linear"} connected</h1>
     <p>You can close this tab</p>
   </div>
   <script>setTimeout(() => window.close(), 1000)</script>

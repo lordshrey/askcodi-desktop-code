@@ -1,17 +1,15 @@
 import { useAtom } from "jotai"
 import { Check, Copy, RefreshCw } from "lucide-react"
 import { useEffect, useState } from "react"
-import { useQuery } from "@tanstack/react-query"
 import {
   autoOfflineModeAtom,
-  betaAutomationsEnabledAtom,
+  betaTasksEnabledAtom,
   betaUpdatesEnabledAtom,
   historyEnabledAtom,
   selectedOllamaModelAtom,
   showOfflineModeFeaturesAtom,
 } from "../../../lib/atoms"
 import { trpc } from "../../../lib/trpc"
-import { remoteTrpc } from "../../../lib/remote-trpc"
 import { cn } from "../../../lib/utils"
 import { Button } from "../../ui/button"
 import { ExternalLinkIcon } from "../../ui/icons"
@@ -50,17 +48,9 @@ export function AgentsBetaTab() {
   const [showOfflineFeatures, setShowOfflineFeatures] = useAtom(showOfflineModeFeaturesAtom)
   const [autoOffline, setAutoOffline] = useAtom(autoOfflineModeAtom)
   const [selectedOllamaModel, setSelectedOllamaModel] = useAtom(selectedOllamaModelAtom)
-  const [automationsEnabled, setAutomationsEnabled] = useAtom(betaAutomationsEnabledAtom)
+  const [tasksEnabled, setTasksEnabled] = useAtom(betaTasksEnabledAtom)
   const [betaUpdatesEnabled, setBetaUpdatesEnabled] = useAtom(betaUpdatesEnabledAtom)
 
-  // Check subscription to gate automations behind paid plan
-  const { data: subscription } = useQuery({
-    queryKey: ["agents", "subscription"],
-    queryFn: () => remoteTrpc.agents.getAgentsSubscription.query(),
-  })
-  const isPaidPlan = subscription?.type !== "free" && !!subscription?.type
-  const isDev = process.env.NODE_ENV === "development"
-  const canEnableAutomations = isPaidPlan || isDev
   const [copied, setCopied] = useState(false)
   const [updateStatus, setUpdateStatus] = useState<"idle" | "checking" | "available" | "not-available" | "error">("idle")
   const [updateVersion, setUpdateVersion] = useState<string | null>(null)
@@ -158,26 +148,19 @@ export function AgentsBetaTab() {
           />
         </div>
 
-        {/* Automations & Inbox Toggle */}
+        {/* Tasks Browser Toggle */}
         <div className="flex items-center justify-between p-4 border-t border-border">
           <div className="flex flex-col space-y-1">
-            <span className={cn("text-sm font-medium", canEnableAutomations ? "text-foreground" : "text-muted-foreground")}>
-              Automations & Inbox
+            <span className="text-sm font-medium text-foreground">
+              Tasks Browser
             </span>
             <span className="text-xs text-muted-foreground">
-              {canEnableAutomations
-                ? "Automate workflows with GitHub and Linear triggers, and manage inbox notifications."
-                : "Requires a paid plan. Upgrade to enable automations and inbox."}
+              Browse GitHub issues, PRs, and Linear tickets to create agent workspaces.
             </span>
           </div>
           <Switch
-            checked={automationsEnabled && canEnableAutomations}
-            onCheckedChange={(checked) => {
-              if (canEnableAutomations) {
-                setAutomationsEnabled(checked)
-              }
-            }}
-            disabled={!canEnableAutomations}
+            checked={tasksEnabled}
+            onCheckedChange={setTasksEnabled}
           />
         </div>
 

@@ -250,6 +250,13 @@ contextBridge.exposeInMainWorld("desktopApi", {
   // VS Code theme scanning
   scanVSCodeThemes: () => ipcRenderer.invoke("vscode:scan-themes"),
   loadVSCodeTheme: (themePath: string) => ipcRenderer.invoke("vscode:load-theme", themePath),
+
+  // Integration events (OAuth completion)
+  onIntegrationConnected: (callback: (platform: string) => void) => {
+    const handler = (_event: unknown, platform: string) => callback(platform)
+    ipcRenderer.on("integration:connected", handler)
+    return () => ipcRenderer.removeListener("integration:connected", handler)
+  },
 })
 
 // Type definitions
@@ -391,6 +398,8 @@ export interface DesktopApi {
   // VS Code theme scanning
   scanVSCodeThemes: () => Promise<DiscoveredTheme[]>
   loadVSCodeTheme: (themePath: string) => Promise<VSCodeThemeData>
+  // Integration events
+  onIntegrationConnected: (callback: (platform: string) => void) => () => void
 }
 
 declare global {

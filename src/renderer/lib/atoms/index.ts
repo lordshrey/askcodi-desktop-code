@@ -73,16 +73,9 @@ export {
   AGENT_MODES,
   getNextMode,
 
-  // Desktop view navigation (Automations / Inbox)
+  // Desktop view navigation (Tasks)
   desktopViewAtom,
-  automationDetailIdAtom,
-  automationTemplateParamsAtom,
-  inboxSelectedChatIdAtom,
-  agentsInboxSidebarWidthAtom,
-  inboxMobileViewModeAtom,
   type DesktopView,
-  type AutomationTemplateParams,
-  type InboxMobileViewMode,
 } from "../../features/agents/atoms"
 
 // ============================================
@@ -195,6 +188,7 @@ export type SettingsTab =
   | "debug"
   | "beta"
   | "keyboard"
+  | "integrations"
 export const agentsSettingsDialogActiveTabAtom = atom<SettingsTab>("preferences")
 // Derived atom: maps settings open/close to desktopView navigation
 export const agentsSettingsDialogOpenAtom = atom(
@@ -445,10 +439,10 @@ export const betaKanbanEnabledAtom = atomWithStorage<boolean>(
   { getOnInit: true },
 )
 
-// Beta: Enable Automations & Inbox
-// When enabled, shows Automations and Inbox navigation in sidebar
-export const betaAutomationsEnabledAtom = atomWithStorage<boolean>(
-  "preferences:beta-automations-enabled",
+// Beta: Enable Tasks browser
+// When enabled, shows Tasks navigation in sidebar
+export const betaTasksEnabledAtom = atomWithStorage<boolean>(
+  "preferences:beta-tasks-enabled",
   false, // Default OFF
   undefined,
   { getOnInit: true },

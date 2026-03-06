@@ -22,6 +22,9 @@ export const projects = sqliteTable("projects", {
   gitRepo: text("git_repo"),
   // Custom project icon (absolute path to local image file)
   iconPath: text("icon_path"),
+  // Linear integration mapping
+  linearTeamId: text("linear_team_id"),
+  linearProjectId: text("linear_project_id"),
 })
 
 export const projectsRelations = relations(projects, ({ many }) => ({
@@ -128,6 +131,26 @@ export const anthropicSettings = sqliteTable("anthropic_settings", {
   ),
 })
 
+// ============ INTEGRATIONS (OAuth tokens for GitHub/Linear) ============
+export const integrations = sqliteTable("integrations", {
+  id: text("id")
+    .primaryKey()
+    .$defaultFn(() => createId()),
+  platform: text("platform").notNull(), // "github" | "linear"
+  accessToken: text("access_token").notNull(), // Encrypted via safeStorage
+  refreshToken: text("refresh_token"), // Encrypted, nullable
+  tokenExpiresAt: integer("token_expires_at", { mode: "timestamp" }),
+  scope: text("scope"), // OAuth scopes granted
+  platformUserId: text("platform_user_id"),
+  platformUsername: text("platform_username"),
+  connectedAt: integer("connected_at", { mode: "timestamp" }).$defaultFn(
+    () => new Date(),
+  ),
+  updatedAt: integer("updated_at", { mode: "timestamp" }).$defaultFn(
+    () => new Date(),
+  ),
+})
+
 // ============ TYPE EXPORTS ============
 export type Project = typeof projects.$inferSelect
 export type NewProject = typeof projects.$inferInsert
@@ -140,3 +163,5 @@ export type NewClaudeCodeCredential = typeof claudeCodeCredentials.$inferInsert
 export type AnthropicAccount = typeof anthropicAccounts.$inferSelect
 export type NewAnthropicAccount = typeof anthropicAccounts.$inferInsert
 export type AnthropicSettings = typeof anthropicSettings.$inferSelect
+export type Integration = typeof integrations.$inferSelect
+export type NewIntegration = typeof integrations.$inferInsert

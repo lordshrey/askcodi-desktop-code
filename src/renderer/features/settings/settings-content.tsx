@@ -17,6 +17,7 @@ import { AgentsProfileTab } from "../../components/dialogs/settings-tabs/agents-
 import { AgentsProjectsTab } from "../../components/dialogs/settings-tabs/agents-project-worktree-tab"
 import { AgentsSkillsTab } from "../../components/dialogs/settings-tabs/agents-skills-tab"
 import { AgentsPluginsTab } from "../../components/dialogs/settings-tabs/agents-plugins-tab"
+import { AgentsIntegrationsTab } from "../../components/dialogs/settings-tabs/agents-integrations-tab"
 
 // Check if we're in development mode
 const isDevelopment = import.meta.env.DEV
@@ -63,6 +64,8 @@ export function SettingsContent() {
         return <AgentsProjectsTab />
       case "beta":
         return <AgentsBetaTab />
+      case "integrations":
+        return <AgentsIntegrationsTab />
       case "debug":
         return showDebugTab ? <AgentsDebugTab /> : null
       default:
