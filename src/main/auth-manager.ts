@@ -3,7 +3,7 @@ import { app, BrowserWindow } from "electron"
 import { AUTH_SERVER_PORT } from "./constants"
 
 // =============================================================================
-// ARCHIVED: 21st.dev OAuth flow — disabled but kept for future reference.
+// ARCHIVED: OAuth flow — disabled but kept for future reference.
 // All public methods return safe no-op values so callers don't crash.
 // =============================================================================
 
@@ -86,7 +86,7 @@ export class AuthManager {
 
   /**
    * Get a valid token, refreshing if necessary
-   * ARCHIVED: Always returns null — 21st.dev OAuth disabled
+   * ARCHIVED: Always returns null — OAuth disabled
    */
   async getValidToken(): Promise<string | null> {
     return null
@@ -168,7 +168,7 @@ export class AuthManager {
 
   /**
    * Check if user is authenticated
-   * ARCHIVED: Always returns false — 21st.dev OAuth disabled
+   * ARCHIVED: Always returns false — OAuth disabled
    */
   isAuthenticated(): boolean {
     return false

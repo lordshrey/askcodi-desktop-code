@@ -171,7 +171,7 @@ export const InfoSection = memo(function InfoSection({
     }
   }
 
-  const isWorktree = !!worktreePath && worktreePath.includes(".21st/worktrees")
+  const isWorktree = !!worktreePath && worktreePath.includes(".askcodi/worktrees")
   const openInEditorHotkey = useResolvedHotkeyDisplay("open-in-editor")
 
   const handleOpenInEditor = useCallback(() => {
@@ -287,7 +287,7 @@ export const InfoSection = memo(function InfoSection({
           tooltip="Open in Finder"
         />
       )}
-      {/* Open in Editor - only for actual git worktrees (under ~/.21st/worktrees/) */}
+      {/* Open in Editor - only for actual git worktrees (under ~/.askcodi/worktrees/) */}
       {isWorktree && (
         <div className="flex items-center min-h-[28px]">
           <div className="flex items-center gap-1.5 w-[100px] flex-shrink-0">

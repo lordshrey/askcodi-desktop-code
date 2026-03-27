@@ -9,12 +9,12 @@ import type { VSCodeFullTheme } from "../atoms"
 import { CURSOR_DARK, CURSOR_LIGHT, CURSOR_MIDNIGHT } from "./cursor-themes"
 
 /**
- * 21st Dark - Default dark theme matching the app's original design
+ * AskCodi Dark - Default dark theme matching the app's original design
  * Uses the brand blue (#0034FF) as primary/accent color
  */
-const TWENTYFIRST_DARK: VSCodeFullTheme = {
-  id: "21st-dark",
-  name: "21st Dark",
+const ASKCODI_DARK: VSCodeFullTheme = {
+  id: "askcodi-dark",
+  name: "AskCodi Dark",
   type: "dark",
   source: "builtin",
   colors: {
@@ -73,12 +73,12 @@ const TWENTYFIRST_DARK: VSCodeFullTheme = {
 }
 
 /**
- * 21st Light - Default light theme matching the app's original design
+ * AskCodi Light - Default light theme matching the app's original design
  * Uses the brand blue (#0034FF) as primary/accent color
  */
-const TWENTYFIRST_LIGHT: VSCodeFullTheme = {
-  id: "21st-light",
-  name: "21st Light",
+const ASKCODI_LIGHT: VSCodeFullTheme = {
+  id: "askcodi-light",
+  name: "AskCodi Light",
   type: "light",
   source: "builtin",
   colors: {
@@ -912,9 +912,9 @@ const CLAUDE_DARK: VSCodeFullTheme = {
  * All built-in themes
  */
 export const BUILTIN_THEMES: VSCodeFullTheme[] = [
-  // 21st Default themes (first)
-  TWENTYFIRST_DARK,
-  TWENTYFIRST_LIGHT,
+  // AskCodi Default themes (first)
+  ASKCODI_DARK,
+  ASKCODI_LIGHT,
   // Cursor themes
   CURSOR_DARK,
   CURSOR_LIGHT,
@@ -947,8 +947,8 @@ export function getBuiltinThemesByType(type: "light" | "dark"): VSCodeFullTheme[
 /**
  * Default theme IDs for light/dark modes
  */
-export const DEFAULT_LIGHT_THEME_ID = "21st-light"
-export const DEFAULT_DARK_THEME_ID = "21st-dark"
+export const DEFAULT_LIGHT_THEME_ID = "askcodi-light"
+export const DEFAULT_DARK_THEME_ID = "askcodi-dark"
 
 /**
  * Set of builtin theme names (lowercase) for filtering discovered themes
