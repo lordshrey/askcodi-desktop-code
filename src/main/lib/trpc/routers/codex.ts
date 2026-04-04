@@ -1,6 +1,20 @@
 import { createACPProvider, type ACPProvider } from "@mcpc-tech/acp-ai-provider"
 import { observable } from "@trpc/server/observable"
 import { streamText } from "ai"
+import {
+  getOrCreateCodex,
+  startOrResumeThread,
+  setThreadId,
+  getThreadId,
+  cleanupThread,
+} from "../../codex-sdk"
+import { adaptCodexEvents } from "../../codex-stream-adapter"
+import {
+  resolveUnifiedMcpServers,
+  toCodexSdkConfig,
+  filterWorkingMcpServers,
+  readProjectMcpJsonCached,
+} from "../../unified-mcp"
 import { eq } from "drizzle-orm"
 import { app } from "electron"
 import { spawn, type ChildProcess } from "node:child_process"
@@ -12,7 +26,6 @@ import { basename, dirname, join, sep } from "node:path"
 import { z } from "zod"
 import {
   normalizeCodexAssistantMessage,
-  normalizeCodexStreamChunk,
 } from "../../../../shared/codex-tool-normalizer"
 import { getClaudeShellEnvironment } from "../../claude/env"
 import { resolveProjectPathFromWorktree } from "../../claude-config"
@@ -136,7 +149,7 @@ const AUTH_HINTS = [
   "401",
   "403",
 ]
-const DEFAULT_CODEX_MODEL = "gpt-5.3-codex/high"
+const DEFAULT_CODEX_MODEL = "gpt-5.4"
 const CODEX_MCP_TOOLS_FETCH_TIMEOUT_MS = 40_000
 const CODEX_USAGE_POLL_ATTEMPTS = 3
 const CODEX_USAGE_POLL_INTERVAL_MS = 200
@@ -234,7 +247,9 @@ function resolveCodexAcpBinaryPath(): string {
   return toUnpackedAsarPath(resolvedPath)
 }
 
+let _cachedCliPath: string | null = null
 function resolveBundledCodexCliPath(): string {
+  if (_cachedCliPath) return _cachedCliPath
   const binaryName = process.platform === "win32" ? "codex.exe" : "codex"
   const resourcesDir = app.isPackaged
     ? join(process.resourcesPath, "bin")
@@ -247,16 +262,69 @@ function resolveBundledCodexCliPath(): string {
 
   const binaryPath = join(resourcesDir, binaryName)
   if (existsSync(binaryPath)) {
+    _cachedCliPath = binaryPath
     return binaryPath
+  }
+
+  // Fallback: resolve native binary from @openai/codex-sdk's platform package
+  try {
+    const sdkBinary = resolveCodexSdkNativeBinary()
+    if (sdkBinary && existsSync(sdkBinary)) {
+      console.log(`[codex] Using SDK native binary: ${sdkBinary}`)
+      _cachedCliPath = sdkBinary
+      return sdkBinary
+    }
+  } catch {
+    // SDK binary resolution failed
   }
 
   const hint = app.isPackaged
     ? "Binary is missing from bundled resources."
-    : "Run `bun run codex:download` to download it for local dev."
+    : "Run `bun run codex:download` or `npm i -g @openai/codex` to install the Codex CLI."
 
   throw new Error(
     `[codex] Bundled Codex CLI not found at ${binaryPath}. ${hint}`,
   )
+}
+
+/**
+ * Resolve the native Codex binary from the SDK's platform package.
+ * This is the actual Mach-O/ELF binary, not a Node.js wrapper script.
+ */
+function resolveCodexSdkNativeBinary(): string | null {
+  const { platform, arch } = process
+  const targetMap: Record<string, Record<string, string>> = {
+    darwin: { arm64: "aarch64-apple-darwin", x64: "x86_64-apple-darwin" },
+    linux: { arm64: "aarch64-unknown-linux-musl", x64: "x86_64-unknown-linux-musl" },
+    win32: { arm64: "aarch64-pc-windows-msvc", x64: "x86_64-pc-windows-msvc" },
+  }
+  const platformPkgMap: Record<string, Record<string, string>> = {
+    darwin: { arm64: "@openai/codex-darwin-arm64", x64: "@openai/codex-darwin-x64" },
+    linux: { arm64: "@openai/codex-linux-arm64", x64: "@openai/codex-linux-x64" },
+    win32: { arm64: "@openai/codex-win32-arm64", x64: "@openai/codex-win32-x64" },
+  }
+
+  const targetTriple = targetMap[platform]?.[arch]
+  const platformPkg = platformPkgMap[platform]?.[arch]
+  if (!targetTriple || !platformPkg) return null
+
+  // Walk up from project root to find node_modules
+  const projectRoot = app.getAppPath()
+  const codexBinaryName = platform === "win32" ? "codex.exe" : "codex"
+
+  // Try direct path in node_modules
+  const directPath = join(
+    projectRoot,
+    "node_modules",
+    ...platformPkg.split("/"),
+    "vendor",
+    targetTriple,
+    "codex",
+    codexBinaryName,
+  )
+  if (existsSync(directPath)) return directPath
+
+  return null
 }
 
 function stripAnsi(input: string): string {
@@ -1303,6 +1371,41 @@ export const codexRouter = router({
     }
   }),
 
+  getModels: publicProcedure.query(async () => {
+    try {
+      const cacheFile = join(homedir(), ".codex", "models_cache.json")
+      const raw = await readFile(cacheFile, "utf-8")
+      const data = JSON.parse(raw) as {
+        fetched_at?: string
+        models?: Array<{
+          slug: string
+          display_name: string
+          description?: string
+          supported_reasoning_levels?: Array<{ effort: string; description?: string }>
+          visibility?: string
+          supported_in_api?: boolean
+          priority?: number
+        }>
+      }
+
+      const models = (data.models ?? [])
+        .filter((m) => m.visibility === "list")
+        .sort((a, b) => (a.priority ?? 99) - (b.priority ?? 99))
+        .map((m) => ({
+          id: m.slug,
+          name: m.display_name,
+          description: m.description,
+          thinkings: (m.supported_reasoning_levels ?? []).map((r) => r.effort),
+          supportedInApi: m.supported_in_api ?? false,
+        }))
+
+      return { models, fetchedAt: data.fetched_at ?? null }
+    } catch {
+      // Cache not available — return empty (frontend falls back to hardcoded list)
+      return { models: [], fetchedAt: null }
+    }
+  }),
+
   logout: publicProcedure.mutation(async () => {
     const logoutResult = await runCodexCli(["logout"])
     const statusResult = await runCodexCli(["login", "status"])
@@ -1637,6 +1740,9 @@ export const codexRouter = router({
             })
             const metadataModel = selectedModelId
 
+            console.log(`[codex] Model resolution: input.model="${input.model}" → requestedModelId="${requestedModelId}" → selectedModelId="${selectedModelId}"`)
+            console.log(`[codex] Chat params: subChatId="${input.subChatId}" mode="${input.mode}" cwd="${input.cwd}" forceNewSession=${input.forceNewSession} sessionId="${input.sessionId}" hasAuthConfig=${!!input.authConfig}`)
+
             const lastMessage = existingMessages[existingMessages.length - 1]
             const isDuplicatePrompt =
               lastMessage?.role === "user" &&
@@ -1705,172 +1811,203 @@ export const codexRouter = router({
             }
 
             if (input.forceNewSession) {
+              cleanupThread(input.subChatId)
               cleanupProvider(input.subChatId)
             }
 
-            let mcpSnapshot: CodexMcpSnapshot = {
-              mcpServersForSession: [],
-              groups: [],
-              fingerprint: getCodexMcpFingerprint([]),
-              fetchedAt: Date.now(),
-              toolsResolved: false,
-            }
-            try {
-              const resolvedProjectPathFromCwd = resolveProjectPathFromWorktree(
-                input.cwd,
-              )
-              const mcpLookupPath =
-                input.projectPath || resolvedProjectPathFromCwd || input.cwd
-              mcpSnapshot = await resolveCodexMcpSnapshot({
-                lookupPath: mcpLookupPath,
-              })
-            } catch (mcpError) {
-              console.error("[codex] Failed to resolve MCP servers:", mcpError)
-            }
+            // --- Codex SDK v2 path ---
+            const USE_CODEX_SDK_V2 = process.env.USE_CODEX_SDK_V2 !== "legacy"
 
-            const provider = getOrCreateProvider({
-              subChatId: input.subChatId,
-              cwd: input.cwd,
-              mcpServers: mcpSnapshot.mcpServersForSession,
-              mcpFingerprint: mcpSnapshot.fingerprint,
-              existingSessionId:
-                input.forceNewSession
+            if (USE_CODEX_SDK_V2) {
+              // Resolve MCP servers from unified layer + Codex CLI
+              let mcpServers: Record<string, any> = {}
+              try {
+                const mcpLookupPath =
+                  input.projectPath ||
+                  resolveProjectPathFromWorktree(input.cwd) ||
+                  input.cwd
+                const unifiedServers = await resolveUnifiedMcpServers(mcpLookupPath)
+                const projectMcpJson = await readProjectMcpJsonCached(mcpLookupPath)
+                mcpServers = filterWorkingMcpServers(unifiedServers, projectMcpJson, mcpLookupPath)
+
+                // Merge Codex CLI TOML servers (TOML wins on name conflict)
+                try {
+                  const mcpSnapshot = await resolveCodexMcpSnapshot({ lookupPath: mcpLookupPath })
+                  for (const srv of mcpSnapshot.mcpServersForSession) {
+                    if (srv.type === "stdio") {
+                      mcpServers[srv.name] = {
+                        command: srv.command,
+                        args: srv.args,
+                        env: Object.fromEntries(srv.env.map((e: any) => [e.name, e.value])),
+                      }
+                    } else if (srv.type === "http") {
+                      mcpServers[srv.name] = {
+                        url: srv.url,
+                        headers: Object.fromEntries(srv.headers.map((h: any) => [h.name, h.value])),
+                      }
+                    }
+                  }
+                } catch {
+                  // Codex CLI not available — use JSON store only
+                }
+              } catch (mcpError) {
+                console.error("[codex] Failed to resolve MCP servers:", mcpError)
+              }
+
+              const codexConfig = toCodexSdkConfig(mcpServers)
+              const codexEnv = buildCodexProviderEnv(input.authConfig)
+
+              const codex = await getOrCreateCodex({
+                apiKey: input.authConfig?.apiKey,
+                env: codexEnv,
+                config: codexConfig,
+              })
+
+              const existingThreadId = input.forceNewSession
+                ? null
+                : input.sessionId ?? getLastSessionId(existingMessages)
+
+              // Parse combined model/reasoning string (e.g., "gpt-5.4/high" → model + effort)
+              // The old ACP provider parsed this internally; the SDK expects separate fields
+              const modelParts = selectedModelId.split("/")
+              const sdkModel = modelParts[0]!
+              const sdkReasoningEffort = (modelParts[1] as "low" | "medium" | "high" | "xhigh") || undefined
+
+              const thread = startOrResumeThread(
+                codex,
+                input.subChatId,
+                {
+                  model: sdkModel,
+                  modelReasoningEffort: sdkReasoningEffort,
+                  workingDirectory: input.cwd,
+                  sandboxMode: input.mode === "plan" ? "read-only" : "workspace-write",
+                  approvalPolicy: "never",
+                },
+                existingThreadId,
+              )
+
+              const startedAt = Date.now()
+              console.log(`[codex-v2] Starting SDK stream: model="${sdkModel}" reasoning="${sdkReasoningEffort}" cwd="${input.cwd}" sandbox="${input.mode === "plan" ? "read-only" : "workspace-write"}" existingThreadId="${existingThreadId}"`)
+
+              console.log(`[codex-v2] Calling thread.runStreamed...`)
+              const streamed = await thread.runStreamed(input.prompt, {
+                signal: abortController.signal,
+              })
+              console.log(`[codex-v2] runStreamed returned, iterating events...`)
+
+              let chunkCount = 0
+              for await (const chunk of adaptCodexEvents(streamed.events, {
+                startedAt,
+                onThreadStarted: (threadId) => {
+                  console.log(`[codex-v2] Thread started: ${threadId}`)
+                  setThreadId(input.subChatId, threadId)
+                  db.update(subChats)
+                    .set({ sessionId: threadId, updatedAt: new Date() })
+                    .where(eq(subChats.id, input.subChatId))
+                    .run()
+                },
+              })) {
+                chunkCount++
+                if (chunkCount <= 5 || chunkCount % 20 === 0) {
+                  console.log(`[codex-v2] Chunk #${chunkCount}: type="${(chunk as any).type}"`)
+                }
+                if (!isAuthoritativeRun()) break
+                safeEmit(chunk)
+              }
+              console.log(`[codex-v2] Stream completed. Total chunks: ${chunkCount}`)
+            } else {
+              // --- Legacy ACP path (USE_CODEX_SDK_V2=legacy) ---
+              let mcpSnapshot: CodexMcpSnapshot = {
+                mcpServersForSession: [],
+                groups: [],
+                fingerprint: getCodexMcpFingerprint([]),
+                fetchedAt: Date.now(),
+                toolsResolved: false,
+              }
+              try {
+                const resolvedProjectPathFromCwd = resolveProjectPathFromWorktree(input.cwd)
+                const mcpLookupPath = input.projectPath || resolvedProjectPathFromCwd || input.cwd
+                mcpSnapshot = await resolveCodexMcpSnapshot({ lookupPath: mcpLookupPath })
+              } catch (mcpError) {
+                console.error("[codex] Failed to resolve MCP servers:", mcpError)
+              }
+
+              const provider = getOrCreateProvider({
+                subChatId: input.subChatId,
+                cwd: input.cwd,
+                mcpServers: mcpSnapshot.mcpServersForSession,
+                mcpFingerprint: mcpSnapshot.fingerprint,
+                existingSessionId: input.forceNewSession
                   ? undefined
                   : input.sessionId ?? getLastSessionId(existingMessages),
-              authConfig: input.authConfig,
-            })
+                authConfig: input.authConfig,
+              })
 
-            const startedAt = Date.now()
-            let latestSessionId =
-              provider.getSessionId() ||
-              input.sessionId ||
-              getLastSessionId(existingMessages)
-            let usagePromise: Promise<CodexUsageMetadata | null> | null = null
-
-            const resolveUsageOnce = (): Promise<CodexUsageMetadata | null> => {
-              if (usagePromise) return usagePromise
-
-              const sessionId = latestSessionId || provider.getSessionId()
-              if (!sessionId) {
-                return Promise.resolve(null)
+              const startedAt = Date.now()
+              let latestSessionId = provider.getSessionId() || input.sessionId || getLastSessionId(existingMessages)
+              let usagePromise: Promise<CodexUsageMetadata | null> | null = null
+              const resolveUsageOnce = (): Promise<CodexUsageMetadata | null> => {
+                if (usagePromise) return usagePromise
+                const sessionId = latestSessionId || provider.getSessionId()
+                if (!sessionId) return Promise.resolve(null)
+                usagePromise = pollUsage(sessionId, { notBeforeTimestampMs: startedAt }).catch(() => null)
+                return usagePromise
               }
 
-              usagePromise = pollUsage(sessionId, {
-                notBeforeTimestampMs: startedAt,
-              }).catch(() => null)
-              return usagePromise
-            }
+              const result = streamText({
+                model: provider.languageModel(selectedModelId),
+                messages: [{ role: "user", content: buildModelMessageContent(input.prompt, input.images) }],
+                tools: provider.tools,
+                abortSignal: abortController.signal,
+              })
 
-            const result = streamText({
-              model: provider.languageModel(selectedModelId),
-              messages: [
-                {
-                  role: "user",
-                  content: buildModelMessageContent(input.prompt, input.images),
+              const uiStream = result.toUIMessageStream({
+                originalMessages: messagesForStream,
+                generateMessageId: () => crypto.randomUUID(),
+                messageMetadata: ({ part }) => {
+                  const sessionId = provider.getSessionId() || undefined
+                  if (sessionId) latestSessionId = sessionId
+                  if (part.type === "finish") {
+                    return { model: metadataModel, sessionId, durationMs: Date.now() - startedAt, resultSubtype: part.finishReason === "error" ? "error" : "success" }
+                  }
+                  return sessionId ? { model: metadataModel, sessionId } : { model: metadataModel }
                 },
-              ],
-              tools: provider.tools,
-              abortSignal: abortController.signal,
-            })
-
-            const uiStream = result.toUIMessageStream({
-              originalMessages: messagesForStream,
-              generateMessageId: () => crypto.randomUUID(),
-              messageMetadata: ({ part }) => {
-                const sessionId = provider.getSessionId() || undefined
-                if (sessionId) {
-                  latestSessionId = sessionId
-                }
-
-                if (part.type === "finish") {
-                  return {
-                    model: metadataModel,
-                    sessionId,
-                    durationMs: Date.now() - startedAt,
-                    resultSubtype: part.finishReason === "error" ? "error" : "success",
+                onFinish: async ({ responseMessage, isContinuation }) => {
+                  try {
+                    const usageMetadata = await resolveUsageOnce()
+                    const responseWithUsage = usageMetadata ? { ...responseMessage, metadata: { ...((responseMessage as any)?.metadata || {}), ...usageMetadata } } : responseMessage
+                    const cleanedResponseMessage = cleanAssistantMessageForPersistence(responseWithUsage)
+                    if (!cleanedResponseMessage) { persistSubChatMessages(messagesForStream); return }
+                    persistSubChatMessages([...(isContinuation ? messagesForStream.slice(0, -1) : messagesForStream), cleanedResponseMessage])
+                  } catch (error) {
+                    console.error("[codex] Failed to persist messages:", error)
                   }
+                },
+                onError: (error) => extractCodexError(error).message,
+              })
+
+              const reader = uiStream.getReader()
+              let pendingFinishChunk: any | null = null
+              while (true) {
+                const { done, value } = await reader.read()
+                if (done) break
+                if (value?.type === "error") {
+                  const normalized = extractCodexError(value)
+                  if (isCodexAuthError(normalized)) { safeEmit({ ...value, type: "auth-error", errorText: normalized.message }) }
+                  else { safeEmit({ ...value, errorText: normalized.message }) }
+                  continue
                 }
-
-                if (sessionId) {
-                  return {
-                    model: metadataModel,
-                    sessionId,
-                  }
-                }
-
-                return { model: metadataModel }
-              },
-              onFinish: async ({ responseMessage, isContinuation }) => {
-                try {
-                  const usageMetadata = await resolveUsageOnce()
-                  const responseWithUsage = usageMetadata
-                    ? {
-                        ...responseMessage,
-                        metadata: {
-                          ...((responseMessage as any)?.metadata || {}),
-                          ...usageMetadata,
-                        },
-                      }
-                    : responseMessage
-                  const cleanedResponseMessage =
-                    cleanAssistantMessageForPersistence(responseWithUsage)
-
-                  if (!cleanedResponseMessage) {
-                    persistSubChatMessages(messagesForStream)
-                    return
-                  }
-
-                  const messagesToPersist = [
-                    ...(isContinuation
-                      ? messagesForStream.slice(0, -1)
-                      : messagesForStream),
-                    cleanedResponseMessage,
-                  ]
-
-                  persistSubChatMessages(messagesToPersist)
-                } catch (error) {
-                  console.error("[codex] Failed to persist messages:", error)
-                }
-              },
-              onError: (error) => extractCodexError(error).message,
-            })
-
-            const reader = uiStream.getReader()
-            let pendingFinishChunk: any | null = null
-            while (true) {
-              const { done, value } = await reader.read()
-              if (done) break
-
-              if (value?.type === "error") {
-                const normalized = extractCodexError(value)
-
-                if (isCodexAuthError(normalized)) {
-                  safeEmit({ ...value, type: "auth-error", errorText: normalized.message })
-                } else {
-                  safeEmit({ ...value, errorText: normalized.message })
-                }
-                continue
+                if (value?.type === "finish") { pendingFinishChunk = value; continue }
+                safeEmit(value)
               }
 
-              if (value?.type === "finish") {
-                pendingFinishChunk = value
-                continue
+              if (pendingFinishChunk) {
+                const usageMetadata = await resolveUsageOnce()
+                if (usageMetadata) { safeEmit({ type: "message-metadata", messageMetadata: usageMetadata }) }
+                safeEmit(pendingFinishChunk)
+              } else {
+                safeEmit({ type: "finish" })
               }
-
-              safeEmit(value)
-            }
-
-            if (pendingFinishChunk) {
-              const usageMetadata = await resolveUsageOnce()
-              if (usageMetadata) {
-                safeEmit({
-                  type: "message-metadata",
-                  messageMetadata: usageMetadata,
-                })
-              }
-              safeEmit(pendingFinishChunk)
-            } else {
-              safeEmit({ type: "finish" })
             }
 
             safeComplete()
@@ -1878,6 +2015,7 @@ export const codexRouter = router({
             const normalized = extractCodexError(error)
 
             console.error("[codex] chat stream error:", error)
+            console.error("[codex] Error message:", (error as Error)?.message?.substring(0, 500))
             if (isCodexAuthError(normalized)) {
               safeEmit({ type: "auth-error", errorText: normalized.message })
             } else {
@@ -1936,6 +2074,7 @@ export const codexRouter = router({
   cleanup: publicProcedure
     .input(z.object({ subChatId: z.string() }))
     .mutation(({ input }) => {
+      cleanupThread(input.subChatId)
       cleanupProvider(input.subChatId)
 
       const activeStream = activeStreams.get(input.subChatId)

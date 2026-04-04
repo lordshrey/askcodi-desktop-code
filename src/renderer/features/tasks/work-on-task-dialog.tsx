@@ -13,7 +13,7 @@ import {
 import { Button } from "../../components/ui/button"
 import { Loader2 } from "lucide-react"
 import { cn } from "../../lib/utils"
-import { CLAUDE_MODELS, CODEX_MODELS } from "../agents/lib/models"
+import { CLAUDE_MODELS, resolveCodexModels } from "../agents/lib/models"
 
 type ProviderId = "claude-code" | "codex" | "askcodi"
 type WorkspaceMode = "new" | "existing"
@@ -75,13 +75,22 @@ export function WorkOnTaskDialog({
     staleTime: 5 * 60 * 1000,
   })
 
+  // Dynamic Codex models from CLI cache
+  const { data: codexModelsData } = trpc.codex.getModels.useQuery(undefined, {
+    staleTime: 5 * 60 * 1000,
+  })
+  const codexModels = useMemo(
+    () => resolveCodexModels(codexModelsData?.models),
+    [codexModelsData],
+  )
+
   // Model options based on selected provider
   const modelOptions = useMemo(() => {
     switch (selectedProvider) {
       case "claude-code":
         return CLAUDE_MODELS.map((m) => ({ id: m.id, label: `${m.name} ${m.version}` }))
       case "codex":
-        return CODEX_MODELS.map((m) => ({ id: m.id, label: m.name }))
+        return codexModels.map((m) => ({ id: m.id, label: m.name }))
       case "askcodi":
         return (askCodiModelsData ?? []).map((m: { id: string; name: string }) => ({
           id: m.id,
@@ -90,7 +99,7 @@ export function WorkOnTaskDialog({
       default:
         return []
     }
-  }, [selectedProvider, askCodiModelsData])
+  }, [selectedProvider, codexModels, askCodiModelsData])
 
   // Reset model when provider changes
   const handleProviderChange = useCallback((provider: ProviderId) => {

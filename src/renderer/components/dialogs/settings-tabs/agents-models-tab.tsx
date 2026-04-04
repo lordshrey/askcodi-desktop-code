@@ -18,7 +18,7 @@ import {
   type CustomClaudeConfig,
 } from "../../../lib/atoms"
 import { ClaudeCodeIcon, CodexIcon, SearchIcon } from "../../ui/icons"
-import { CLAUDE_MODELS, CODEX_MODELS } from "../../../features/agents/lib/models"
+import { CLAUDE_MODELS, resolveCodexModels } from "../../../features/agents/lib/models"
 import { trpc } from "../../../lib/trpc"
 import { Badge } from "../../ui/badge"
 import { Button } from "../../ui/button"
@@ -563,20 +563,29 @@ export function AgentsModelsTab() {
     staleTime: 5 * 60 * 1000,
   })
 
+  // Dynamic Codex models from CLI cache
+  const { data: codexModelsData } = trpc.codex.getModels.useQuery(undefined, {
+    staleTime: 5 * 60 * 1000,
+  })
+  const codexModels = useMemo(
+    () => resolveCodexModels(codexModelsData?.models),
+    [codexModelsData],
+  )
+
   // All models merged into one list for the top section
   const allModels = useMemo(() => {
     const items: { id: string; name: string; provider: "claude" | "codex" | "askcodi" }[] = []
     for (const m of CLAUDE_MODELS) {
       items.push({ id: m.id, name: `${m.name} ${m.version}`, provider: "claude" })
     }
-    for (const m of CODEX_MODELS) {
+    for (const m of codexModels) {
       items.push({ id: m.id, name: m.name, provider: "codex" })
     }
     for (const m of (askCodiModelsData || [])) {
       items.push({ id: m.id, name: m.name, provider: "askcodi" })
     }
     return items
-  }, [askCodiModelsData])
+  }, [codexModels, askCodiModelsData])
 
   const [modelSearch, setModelSearch] = useState("")
   const filteredModels = useMemo(() => {

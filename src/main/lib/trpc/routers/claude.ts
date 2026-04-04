@@ -29,6 +29,16 @@ import {
   type ClaudeConfig,
   type McpServerConfig,
 } from "../../claude-config"
+import {
+  clearMcpCaches,
+  filterWorkingMcpServers,
+  mcpCacheKey,
+  mcpConfigCache,
+  projectMcpJsonCache,
+  readProjectMcpJsonCached,
+  resolveUnifiedMcpServers,
+  workingMcpServers,
+} from "../../unified-mcp"
 import { anthropicAccounts, anthropicSettings, chats, claudeCodeCredentials, getDatabase, projects as projectsTable, subChats } from "../../db"
 import { createRollbackStash } from "../../git/stash"
 import {
@@ -277,63 +287,8 @@ export function abortAllClaudeSessions(): void {
 }
 
 // In-memory cache of working MCP server names (resets on app restart)
-// Key: "scope::serverName" where scope is "__global__" or projectPath
-// Value: true if working (has tools), false if failed
-export const workingMcpServers = new Map<string, boolean>()
-
-// Helper to build scoped cache key
-const GLOBAL_SCOPE = "__global__"
-function mcpCacheKey(scope: string | null, serverName: string): string {
-  return `${scope ?? GLOBAL_SCOPE}::${serverName}`
-}
-
 // Cache for symlinks (track which subChatIds have already set up symlinks)
 const symlinksCreated = new Set<string>()
-
-// Cache for MCP config (avoid re-reading ~/.claude.json on every message)
-const mcpConfigCache = new Map<
-  string,
-  {
-    config: Record<string, any> | undefined
-    mtime: number
-  }
->()
-
-// Cache for .mcp.json files (avoid re-reading on every message)
-const projectMcpJsonCache = new Map<
-  string,
-  {
-    servers: Record<string, McpServerConfig>
-    mtime: number
-  }
->()
-
-/**
- * Read .mcp.json with mtime-based caching
- */
-async function readProjectMcpJsonCached(
-  projectPath: string
-): Promise<Record<string, McpServerConfig>> {
-  try {
-    const mcpJsonPath = path.join(projectPath, ".mcp.json")
-    const stats = await fs.stat(mcpJsonPath).catch(() => null)
-    if (!stats) return {}
-
-    const cached = projectMcpJsonCache.get(mcpJsonPath)
-    if (cached && cached.mtime === stats.mtimeMs) {
-      return cached.servers
-    }
-
-    const servers = await readProjectMcpJson(projectPath)
-    projectMcpJsonCache.set(mcpJsonPath, {
-      servers,
-      mtime: stats.mtimeMs,
-    })
-    return servers
-  } catch {
-    return {}
-  }
-}
 
 const pendingToolApprovals = new Map<
   string,
@@ -372,8 +327,7 @@ export type ImageAttachment = z.infer<typeof imageAttachmentSchema>
 export function clearClaudeCaches() {
   cachedClaudeQuery = null
   symlinksCreated.clear()
-  mcpConfigCache.clear()
-  projectMcpJsonCache.clear()
+  clearMcpCaches()
   console.log("[claude] All caches cleared")
 }
 
@@ -1263,117 +1217,17 @@ export const claudeRouter = router({
                 }
               }
 
-              // Read MCP servers from all sources for the original project path
-              // These will be passed directly to the SDK via options.mcpServers
-              // Sources: ~/.claude.json, ~/.claude/.claude.json, ~/.claude/mcp.json, .mcp.json
-              // OPTIMIZATION: Cache configs by file mtime to avoid re-parsing on every message
-              const claudeJsonSource = path.join(os.homedir(), ".claude.json")
+              // Read MCP servers from all sources via unified module
+              const lookupPath = input.projectPath || input.cwd
               try {
-                const stats = await fs.stat(claudeJsonSource).catch(() => null)
-                const currentMtime = stats?.mtimeMs ?? 0
-                const cached = mcpConfigCache.get(claudeJsonSource)
-                const lookupPath = input.projectPath || input.cwd
-
-                // Get or refresh cached config
-                let claudeConfig: any
-                if (cached && cached.mtime === currentMtime && currentMtime > 0) {
-                  claudeConfig = cached.config
-                } else if (stats) {
-                  claudeConfig = JSON.parse(
-                    await fs.readFile(claudeJsonSource, "utf-8"),
-                  )
-                  mcpConfigCache.set(claudeJsonSource, {
-                    config: claudeConfig,
-                    mtime: currentMtime,
-                  })
-                } else {
-                  claudeConfig = {}
-                }
-
-                // Read ~/.claude/.claude.json once for reuse
-                let chatClaudeDirConfig: ClaudeConfig = {}
-                try {
-                  chatClaudeDirConfig = await readClaudeDirConfig()
-                } catch { /* ignore */ }
-
-                // Merge global servers from all user-level sources
-                const globalServers = await getMergedGlobalMcpServers(claudeConfig, chatClaudeDirConfig)
-
-                // Merge per-project servers from config files
-                const projectConfigServers = await getMergedLocalProjectMcpServers(lookupPath, claudeConfig, chatClaudeDirConfig)
-
-                // Read .mcp.json from project root (with mtime caching)
+                const allServers = await resolveUnifiedMcpServers(lookupPath)
+                // For filtering, we need to know which are project-scoped
                 const projectMcpJsonServers = await readProjectMcpJsonCached(lookupPath)
-
-                // Per-project config servers override .mcp.json
-                const projectServers = { ...projectMcpJsonServers, ...projectConfigServers }
-
-                // Load plugin MCP servers (filtered by enabled plugins and approval)
-                const [
-                  enabledPluginSources,
-                  pluginMcpConfigs,
-                  approvedServers,
-                ] = await Promise.all([
-                  getEnabledPlugins(),
-                  discoverPluginMcpServers(),
-                  getApprovedPluginMcpServers(),
-                ])
-
-                const pluginServers: Record<string, McpServerConfig> = {}
-                for (const pConfig of pluginMcpConfigs) {
-                  if (enabledPluginSources.includes(pConfig.pluginSource)) {
-                    for (const [name, serverConfig] of Object.entries(
-                      pConfig.mcpServers,
-                    )) {
-                      if (!globalServers[name] && !projectServers[name]) {
-                        const identifier = `${pConfig.pluginSource}:${name}`
-                        if (approvedServers.includes(identifier)) {
-                          pluginServers[name] = serverConfig
-                        }
-                      }
-                    }
-                  }
-                }
-
-                // Priority: project > global > plugin
-                const allServers = {
-                  ...pluginServers,
-                  ...globalServers,
-                  ...projectServers,
-                }
-
-                // Filter to only working MCPs using scoped cache keys
-                if (workingMcpServers.size > 0) {
-                  const filtered: Record<string, any> = {}
-                  // Resolve worktree path to original project path to match cache keys
-                  const resolvedProjectPath =
-                    resolveProjectPathFromWorktree(lookupPath) || lookupPath
-                  for (const [name, srvConfig] of Object.entries(allServers)) {
-                    // Use resolved project scope if server is from project, otherwise global
-                    const scope =
-                      name in projectServers ? resolvedProjectPath : null
-                    const cacheKey = mcpCacheKey(scope, name)
-                    // Include server if it's marked working, or if it's not in cache at all
-                    // (plugin servers won't be in the cache yet)
-                    if (
-                      workingMcpServers.get(cacheKey) === true ||
-                      !workingMcpServers.has(cacheKey)
-                    ) {
-                      filtered[name] = srvConfig
-                    }
-                  }
-                  mcpServersForSdk = filtered
-                  const skipped =
-                    Object.keys(allServers).length -
-                    Object.keys(filtered).length
-                  if (skipped > 0) {
-                    console.log(
-                      `[claude] Filtered out ${skipped} non-working MCP(s)`,
-                    )
-                  }
-                } else {
-                  mcpServersForSdk = allServers
-                }
+                mcpServersForSdk = filterWorkingMcpServers(
+                  allServers,
+                  projectMcpJsonServers,
+                  lookupPath,
+                )
               } catch (configErr) {
                 console.error(`[claude] Failed to read MCP config:`, configErr)
               }
@@ -2844,9 +2698,7 @@ ${prompt}
   getAllMcpConfig: publicProcedure.query(getAllMcpConfigHandler),
 
   refreshMcpConfig: publicProcedure.mutation(() => {
-    workingMcpServers.clear()
-    mcpConfigCache.clear()
-    projectMcpJsonCache.clear()
+    clearMcpCaches()
     return { success: true }
   }),
 

@@ -123,6 +123,7 @@ import {
 import {
   CLAUDE_MODELS,
   CODEX_MODELS,
+  resolveCodexModels,
   type CodexThinkingLevel,
 } from "../lib/models"
 // import type { PlanType } from "@/lib/config/subscription-plans"
@@ -372,14 +373,16 @@ export function NewChatForm({
       { id: "", name: "AskCodi" },
     [askCodiModels, lastSelectedAskCodiModelId],
   )
+  // Dynamic Codex models from CLI cache (falls back to hardcoded CODEX_MODELS)
+  const { data: codexModelsData } = trpc.codex.getModels.useQuery(undefined, {
+    staleTime: 5 * 60 * 1000,
+  })
   const codexUiModels = useMemo(
     () => {
-      let models = hasAppCodexApiKey
-        ? CODEX_MODELS.filter((model) => model.id !== "gpt-5.3-codex")
-        : CODEX_MODELS
+      const models = resolveCodexModels(codexModelsData?.models)
       return models.filter((model) => !hiddenModels.includes(model.id))
     },
-    [hasAppCodexApiKey, hiddenModels],
+    [codexModelsData, hiddenModels],
   )
   const selectedCodexModel = useMemo(
     () =>
