@@ -209,3 +209,260 @@ export async function discoverPluginMcpServers(): Promise<PluginMcpConfig[]> {
   mcpCache = { configs, timestamp: Date.now() }
   return configs
 }
+
+// ============ PLUGIN SCOPE (Plugin Mode) ============
+
+/**
+ * Unified plugin manifest (plugin.json).
+ * Supports both the new ~/.askcodi/plugins/ format and legacy .claude-plugin/ format.
+ */
+export interface PluginManifest {
+  name: string
+  version?: string
+  description?: string
+  author?: string | { name: string; email?: string }
+  category?: string
+  tags?: string[]
+  // Skills: either a directory path (legacy/bundled) or array of skill names (reference model)
+  skills?: string | string[]
+  // Agents: either a directory path (legacy/bundled) or array of agent names (reference model)
+  agents?: string | string[]
+  // Commands: either a directory path (legacy/bundled) or array of command names
+  commands?: string | string[]
+  // MCP servers: path to .mcp.json file
+  mcpServers?: string
+  interface?: {
+    icon?: string
+    systemPromptAppend?: string
+    displayName?: string
+    shortDescription?: string
+  }
+}
+
+/**
+ * Resolved plugin scope — everything needed to scope an agent session to a single plugin.
+ *
+ * Two models supported:
+ * - Directory (bundled plugins): skills/agents live physically inside the plugin folder
+ * - Reference (playlist model): plugin.json lists skill/agent names, resolved from discovery paths
+ */
+export interface PluginScope {
+  pluginPath: string
+  pluginName: string
+  pluginSource: string
+  // Directory-based (bundled plugins from git)
+  skillsDir: string | null
+  agentsDir: string | null
+  commandsDir: string | null
+  // Reference-based (playlist model — names to look up from discovery paths)
+  skillRefs: string[]
+  agentRefs: string[]
+  commandRefs: string[]
+  // MCP servers (always from plugin's .mcp.json)
+  mcpServers: Record<string, McpServerConfig>
+  systemPromptAppend?: string
+}
+
+/**
+ * Resolve the full scope of a plugin by its source identifier.
+ * Reads the plugin manifest and resolves all component paths + MCP servers.
+ */
+export async function resolvePluginScope(
+  pluginSource: string,
+): Promise<PluginScope | null> {
+  const plugins = await discoverInstalledPlugins()
+  const plugin = plugins.find((p) => p.source === pluginSource)
+  if (!plugin) return null
+
+  // Try to read unified plugin.json manifest first
+  const manifestPath = path.join(plugin.path, "plugin.json")
+  let manifest: PluginManifest | null = null
+  try {
+    const raw = await fs.readFile(manifestPath, "utf-8")
+    manifest = JSON.parse(raw)
+  } catch {
+    // No plugin.json — use component path conventions
+  }
+
+  // Resolve skills: either directory (bundled) or references (playlist model)
+  let skillsDir: string | null = null
+  let skillRefs: string[] = []
+  if (Array.isArray(manifest?.skills)) {
+    // Reference model: plugin lists skill names
+    skillRefs = manifest.skills as string[]
+  } else {
+    // Directory model: skills physically in plugin folder
+    const skillsCandidates = [
+      typeof manifest?.skills === "string" ? path.join(plugin.path, manifest.skills) : null,
+      path.join(plugin.path, "skills"),
+    ].filter(Boolean) as string[]
+    for (const candidate of skillsCandidates) {
+      try {
+        await fs.access(candidate)
+        skillsDir = candidate
+        break
+      } catch { /* not found */ }
+    }
+  }
+
+  // Resolve agents: either directory or references
+  let agentsDir: string | null = null
+  let agentRefs: string[] = []
+  if (Array.isArray(manifest?.agents)) {
+    agentRefs = manifest.agents as string[]
+  } else {
+    const agentsCandidates = [
+      typeof manifest?.agents === "string" ? path.join(plugin.path, manifest.agents) : null,
+      path.join(plugin.path, "agents"),
+    ].filter(Boolean) as string[]
+    for (const candidate of agentsCandidates) {
+      try {
+        await fs.access(candidate)
+        agentsDir = candidate
+        break
+      } catch { /* not found */ }
+    }
+  }
+
+  // Resolve commands: either directory or references
+  let commandsDir: string | null = null
+  let commandRefs: string[] = []
+  if (Array.isArray(manifest?.commands)) {
+    commandRefs = manifest.commands as string[]
+  } else {
+    const commandsCandidates = [
+      typeof manifest?.commands === "string" ? path.join(plugin.path, manifest.commands) : null,
+      path.join(plugin.path, "commands"),
+    ].filter(Boolean) as string[]
+    for (const candidate of commandsCandidates) {
+      try {
+        await fs.access(candidate)
+        commandsDir = candidate
+        break
+      } catch { /* not found */ }
+    }
+  }
+
+  // Resolve MCP servers
+  let mcpServers: Record<string, McpServerConfig> = {}
+  const mcpJsonPath = manifest?.mcpServers
+    ? path.join(plugin.path, manifest.mcpServers)
+    : path.join(plugin.path, ".mcp.json")
+  try {
+    const mcpContent = await fs.readFile(mcpJsonPath, "utf-8")
+    const parsed = JSON.parse(mcpContent)
+    const serversObj =
+      parsed.mcpServers && typeof parsed.mcpServers === "object" && !Array.isArray(parsed.mcpServers)
+        ? parsed.mcpServers
+        : parsed
+    for (const [name, config] of Object.entries(serversObj)) {
+      if (config && typeof config === "object" && !Array.isArray(config)) {
+        mcpServers[name] = config as McpServerConfig
+      }
+    }
+  } catch {
+    // No MCP config
+  }
+
+  return {
+    pluginPath: plugin.path,
+    pluginName: manifest?.name ?? plugin.name,
+    pluginSource: plugin.source,
+    skillsDir,
+    agentsDir,
+    commandsDir,
+    skillRefs,
+    agentRefs,
+    commandRefs,
+    mcpServers,
+    systemPromptAppend: manifest?.interface?.systemPromptAppend,
+  }
+}
+
+/**
+ * Discover plugins from the new ~/.askcodi/plugins/ directory.
+ * Each marketplace subdirectory contains plugin folders with plugin.json manifests.
+ */
+export async function discoverUnifiedPlugins(): Promise<PluginInfo[]> {
+  const plugins: PluginInfo[] = []
+  const pluginsDir = path.join(os.homedir(), ".askcodi", "plugins")
+
+  try {
+    await fs.access(pluginsDir)
+  } catch {
+    return plugins
+  }
+
+  let marketplaces: Dirent[]
+  try {
+    marketplaces = await fs.readdir(pluginsDir, { withFileTypes: true })
+  } catch {
+    return plugins
+  }
+
+  for (const marketplace of marketplaces) {
+    if (!(await isDirentDirectory(pluginsDir, marketplace))) continue
+
+    const marketplaceDir = path.join(pluginsDir, marketplace.name)
+    let pluginDirs: Dirent[]
+    try {
+      pluginDirs = await fs.readdir(marketplaceDir, { withFileTypes: true })
+    } catch {
+      continue
+    }
+
+    for (const pluginDir of pluginDirs) {
+      if (!(await isDirentDirectory(marketplaceDir, pluginDir))) continue
+
+      const pluginPath = path.join(marketplaceDir, pluginDir.name)
+      const manifestPath = path.join(pluginPath, "plugin.json")
+
+      try {
+        const raw = await fs.readFile(manifestPath, "utf-8")
+        const manifest: PluginManifest = JSON.parse(raw)
+
+        plugins.push({
+          name: manifest.name || pluginDir.name,
+          version: manifest.version || "0.0.0",
+          description: manifest.description,
+          path: pluginPath,
+          source: `${marketplace.name}:${manifest.name || pluginDir.name}`,
+          marketplace: marketplace.name,
+          category: manifest.category,
+          tags: manifest.tags,
+        })
+      } catch {
+        // No valid plugin.json, skip
+      }
+    }
+  }
+
+  return plugins
+}
+
+/**
+ * Discover ALL plugins from both legacy and unified paths.
+ * Returns combined list, deduplicating by source identifier.
+ */
+export async function discoverAllPlugins(): Promise<PluginInfo[]> {
+  const [legacy, unified] = await Promise.all([
+    discoverInstalledPlugins(),
+    discoverUnifiedPlugins(),
+  ])
+
+  // Unified plugins take precedence on name conflict
+  const seen = new Set<string>()
+  const combined: PluginInfo[] = []
+
+  for (const p of unified) {
+    seen.add(p.source)
+    combined.push(p)
+  }
+  for (const p of legacy) {
+    if (!seen.has(p.source)) {
+      combined.push(p)
+    }
+  }
+
+  return combined
+}

@@ -6,7 +6,7 @@ import * as os from "os"
 import matter from "gray-matter"
 import { discoverInstalledPlugins, getPluginComponentPaths } from "../../plugins"
 import { isDirentDirectory } from "../../fs/dirent"
-import { getEnabledPlugins } from "./claude-settings"
+import { getEnabledPlugins } from "./app-settings"
 
 export interface FileSkill {
   name: string

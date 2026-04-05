@@ -5,7 +5,7 @@ import { settingsPluginsSidebarWidthAtom } from "../../../features/agents/atoms"
 import { agentsSettingsDialogActiveTabAtom, type SettingsTab } from "../../../lib/atoms"
 import { trpc } from "../../../lib/trpc"
 import { cn } from "../../../lib/utils"
-import { Terminal, ChevronRight, Loader2 } from "lucide-react"
+import { Terminal, ChevronRight, Loader2, Plus, Trash2 } from "lucide-react"
 import { PluginFilledIcon, SkillIconFilled, CustomAgentIconFilled, OriginalMCPIcon } from "../../ui/icons"
 import { Button } from "../../ui/button"
 import { Label } from "../../ui/label"
@@ -58,6 +58,8 @@ function PluginDetail({
   mcpServerStatuses,
   onMcpAuth,
   isAuthenticating,
+  onUninstall,
+  onRefetch,
 }: {
   plugin: PluginData
   onToggleEnabled: (enabled: boolean) => void
@@ -66,7 +68,17 @@ function PluginDetail({
   mcpServerStatuses: Record<string, McpServerStatus>
   onMcpAuth: (serverName: string) => void
   isAuthenticating: boolean
+  onUninstall?: () => void
+  onRefetch: () => void
 }) {
+  // Check if this is a user-created plugin (has reference-model skills/agents)
+  const scopeQuery = trpc.plugins.getPluginScope.useQuery(
+    { pluginSource: plugin.source },
+    { staleTime: 30_000 },
+  )
+  const pluginScope = scopeQuery.data
+  const isUserPlugin = plugin.path.includes("/.askcodi/plugins/")
+  const hasRefs = pluginScope && (pluginScope.skillRefs.length > 0 || pluginScope.agentRefs.length > 0 || (pluginScope.skillsDir === null && pluginScope.agentsDir === null))
   return (
     <div className="h-full flex flex-col overflow-hidden">
       <div className="flex-1 overflow-y-auto">
@@ -248,6 +260,31 @@ function PluginDetail({
           </div>
         )}
 
+        {/* Skill/Agent Assignment (for user-created or reference-model plugins) */}
+        {isUserPlugin && pluginScope && (
+          <SkillAssignmentSection
+            pluginSource={plugin.source}
+            currentSkillRefs={pluginScope.skillRefs || []}
+            currentAgentRefs={pluginScope.agentRefs || []}
+            onUpdated={() => { onRefetch(); scopeQuery.refetch() }}
+          />
+        )}
+
+        {/* Uninstall (only for AskCodi plugins) */}
+        {onUninstall && isUserPlugin && (
+          <div className="pt-3 border-t border-border">
+            <Button
+              variant="ghost"
+              size="sm"
+              className="h-7 px-3 text-xs text-destructive hover:text-destructive hover:bg-destructive/10 gap-1.5"
+              onClick={onUninstall}
+            >
+              <Trash2 className="h-3.5 w-3.5" />
+              Uninstall Plugin
+            </Button>
+          </div>
+        )}
+
         </div>
       </div>
     </div>
@@ -282,6 +319,281 @@ function PluginListItem({
         </div>
       )}
     </button>
+  )
+}
+
+// --- Create Plugin Dialog ---
+function CreatePluginSection({ onCreated }: { onCreated: () => void }) {
+  const [isOpen, setIsOpen] = useState(false)
+  const [name, setName] = useState("")
+  const [description, setDescription] = useState("")
+  const createMutation = trpc.plugins.create.useMutation()
+
+  const handleCreate = async () => {
+    if (!name.trim()) return
+    try {
+      await createMutation.mutateAsync({
+        name: name.trim().toLowerCase().replace(/[^a-z0-9-]/g, "-"),
+        description: description.trim() || undefined,
+      })
+      toast.success(`Plugin "${name}" created`)
+      setName("")
+      setDescription("")
+      setIsOpen(false)
+      onCreated()
+    } catch (err) {
+      toast.error(`Failed: ${err instanceof Error ? err.message : String(err)}`)
+    }
+  }
+
+  if (!isOpen) {
+    return (
+      <Button
+        variant="ghost"
+        size="sm"
+        className="w-full h-7 text-xs justify-start gap-1.5 text-muted-foreground"
+        onClick={() => setIsOpen(true)}
+      >
+        <Plus className="h-3.5 w-3.5" />
+        New Plugin
+      </Button>
+    )
+  }
+
+  return (
+    <div className="space-y-1.5 p-2 rounded-md border border-input bg-muted/30">
+      <input
+        placeholder="plugin-name (lowercase, hyphens)"
+        value={name}
+        onChange={(e) => setName(e.target.value)}
+        onKeyDown={(e) => e.key === "Enter" && handleCreate()}
+        className="h-6 w-full rounded text-[11px] bg-background border border-input/50 px-2 placeholder:text-muted-foreground/30 outline-none"
+        autoFocus
+      />
+      <input
+        placeholder="Description (optional)"
+        value={description}
+        onChange={(e) => setDescription(e.target.value)}
+        onKeyDown={(e) => e.key === "Enter" && handleCreate()}
+        className="h-6 w-full rounded text-[11px] bg-background border border-input/50 px-2 placeholder:text-muted-foreground/30 outline-none"
+      />
+      <div className="flex gap-1">
+        <Button variant="ghost" size="sm" className="h-6 px-2 text-[11px] flex-1" onClick={() => setIsOpen(false)}>
+          Cancel
+        </Button>
+        <Button variant="default" size="sm" className="h-6 px-2 text-[11px] flex-1" onClick={handleCreate} disabled={!name.trim() || createMutation.isPending}>
+          {createMutation.isPending ? <Loader2 className="h-3 w-3 animate-spin" /> : "Create"}
+        </Button>
+      </div>
+    </div>
+  )
+}
+
+// --- Skill/Agent Assignment (Reference Model) ---
+function SkillAssignmentSection({
+  pluginSource,
+  currentSkillRefs,
+  currentAgentRefs,
+  onUpdated,
+}: {
+  pluginSource: string
+  currentSkillRefs: string[]
+  currentAgentRefs: string[]
+  onUpdated: () => void
+}) {
+  const [skillInput, setSkillInput] = useState("")
+  const [agentInput, setAgentInput] = useState("")
+  const updateRefsMutation = trpc.plugins.updateRefs.useMutation()
+
+  const handleAddSkill = async () => {
+    if (!skillInput.trim()) return
+    const newRefs = [...currentSkillRefs, skillInput.trim()]
+    try {
+      await updateRefsMutation.mutateAsync({ pluginSource, skills: newRefs })
+      setSkillInput("")
+      onUpdated()
+    } catch (err) {
+      toast.error(`Failed: ${err instanceof Error ? err.message : String(err)}`)
+    }
+  }
+
+  const handleRemoveSkill = async (name: string) => {
+    const newRefs = currentSkillRefs.filter((r) => r !== name)
+    try {
+      await updateRefsMutation.mutateAsync({ pluginSource, skills: newRefs })
+      onUpdated()
+    } catch (err) {
+      toast.error(`Failed: ${err instanceof Error ? err.message : String(err)}`)
+    }
+  }
+
+  const handleAddAgent = async () => {
+    if (!agentInput.trim()) return
+    const newRefs = [...currentAgentRefs, agentInput.trim()]
+    try {
+      await updateRefsMutation.mutateAsync({ pluginSource, agents: newRefs })
+      setAgentInput("")
+      onUpdated()
+    } catch (err) {
+      toast.error(`Failed: ${err instanceof Error ? err.message : String(err)}`)
+    }
+  }
+
+  const handleRemoveAgent = async (name: string) => {
+    const newRefs = currentAgentRefs.filter((r) => r !== name)
+    try {
+      await updateRefsMutation.mutateAsync({ pluginSource, agents: newRefs })
+      onUpdated()
+    } catch (err) {
+      toast.error(`Failed: ${err instanceof Error ? err.message : String(err)}`)
+    }
+  }
+
+  return (
+    <div className="space-y-3">
+      {/* Skill References */}
+      <div className="space-y-1.5">
+        <Label>Referenced Skills</Label>
+        {currentSkillRefs.map((ref) => (
+          <div key={ref} className="flex items-center gap-1.5 rounded-md border border-border bg-background px-2.5 py-1">
+            <SkillIconFilled className="h-3 w-3 text-muted-foreground shrink-0" />
+            <span className="text-xs font-mono flex-1">{ref}</span>
+            <button onClick={() => handleRemoveSkill(ref)} className="text-muted-foreground/40 hover:text-destructive">
+              <Trash2 className="h-3 w-3" />
+            </button>
+          </div>
+        ))}
+        <div className="flex gap-1">
+          <input
+            placeholder="Skill name to add..."
+            value={skillInput}
+            onChange={(e) => setSkillInput(e.target.value)}
+            onKeyDown={(e) => e.key === "Enter" && handleAddSkill()}
+            className="h-6 flex-1 rounded text-[11px] bg-muted/50 border border-input/50 px-2 placeholder:text-muted-foreground/30 outline-none"
+          />
+          <Button variant="ghost" size="sm" className="h-6 px-2 text-[11px]" onClick={handleAddSkill} disabled={!skillInput.trim()}>
+            <Plus className="h-3 w-3" />
+          </Button>
+        </div>
+      </div>
+
+      {/* Agent References */}
+      <div className="space-y-1.5">
+        <Label>Referenced Agents</Label>
+        {currentAgentRefs.map((ref) => (
+          <div key={ref} className="flex items-center gap-1.5 rounded-md border border-border bg-background px-2.5 py-1">
+            <CustomAgentIconFilled className="h-3 w-3 text-muted-foreground shrink-0" />
+            <span className="text-xs font-mono flex-1">{ref}</span>
+            <button onClick={() => handleRemoveAgent(ref)} className="text-muted-foreground/40 hover:text-destructive">
+              <Trash2 className="h-3 w-3" />
+            </button>
+          </div>
+        ))}
+        <div className="flex gap-1">
+          <input
+            placeholder="Agent name to add..."
+            value={agentInput}
+            onChange={(e) => setAgentInput(e.target.value)}
+            onKeyDown={(e) => e.key === "Enter" && handleAddAgent()}
+            className="h-6 flex-1 rounded text-[11px] bg-muted/50 border border-input/50 px-2 placeholder:text-muted-foreground/30 outline-none"
+          />
+          <Button variant="ghost" size="sm" className="h-6 px-2 text-[11px]" onClick={handleAddAgent} disabled={!agentInput.trim()}>
+            <Plus className="h-3 w-3" />
+          </Button>
+        </div>
+      </div>
+    </div>
+  )
+}
+
+// --- Install from URL ---
+/**
+ * Parse a GitHub URL to extract the clone URL, subdirectory, and plugin name.
+ * Supports:
+ *   https://github.com/owner/repo/tree/branch/path/to/plugin → clone repo, subdir = path/to/plugin
+ *   https://github.com/owner/repo.git → clone repo, no subdir
+ *   https://github.com/owner/repo → clone repo, no subdir
+ */
+function parseGitUrl(input: string): { url: string; subdirectory?: string; name?: string } {
+  const trimmed = input.trim()
+
+  // Match GitHub tree URLs: github.com/owner/repo/tree/branch/path
+  const treeMatch = trimmed.match(
+    /^https?:\/\/github\.com\/([^/]+)\/([^/]+)\/tree\/[^/]+\/(.+?)$/,
+  )
+  if (treeMatch) {
+    const [, owner, repo, subPath] = treeMatch
+    const name = subPath.split("/").pop() || repo
+    return {
+      url: `https://github.com/${owner}/${repo}.git`,
+      subdirectory: subPath,
+      name,
+    }
+  }
+
+  // Already a .git URL or plain repo URL
+  const repoMatch = trimmed.match(/^https?:\/\/github\.com\/([^/]+)\/([^/]+?)(?:\.git)?$/)
+  if (repoMatch) {
+    const [, owner, repo] = repoMatch
+    return { url: `https://github.com/${owner}/${repo}.git` }
+  }
+
+  // Fallback: use as-is
+  return { url: trimmed }
+}
+
+function InstallFromUrlSection() {
+  const [url, setUrl] = useState("")
+  const [isInstalling, setIsInstalling] = useState(false)
+  const installMutation = trpc.plugins.installFromUrl.useMutation()
+  const utils = trpc.useUtils()
+
+  const handleInstall = async () => {
+    if (!url.trim()) return
+    setIsInstalling(true)
+    try {
+      const parsed = parseGitUrl(url)
+      const result = await installMutation.mutateAsync({
+        url: parsed.url,
+        subdirectory: parsed.subdirectory,
+        name: parsed.name,
+      })
+      if (result.success) {
+        toast.success(
+          `Installed ${result.plugins?.length || 0} plugin(s): ${result.plugins?.join(", ") || "none"}`,
+        )
+        setUrl("")
+        utils.plugins.list.invalidate()
+        utils.plugins.listForPluginMode.invalidate()
+      } else {
+        toast.error(`Install failed: ${result.error}`)
+      }
+    } catch (err) {
+      toast.error(`Install failed: ${err instanceof Error ? err.message : String(err)}`)
+    } finally {
+      setIsInstalling(false)
+    }
+  }
+
+  return (
+    <div className="flex items-center gap-1">
+      <input
+        placeholder="GitHub URL or git URL..."
+        value={url}
+        onChange={(e) => setUrl(e.target.value)}
+        onKeyDown={(e) => e.key === "Enter" && handleInstall()}
+        className="h-6 w-full rounded text-[11px] bg-muted/50 border border-input/50 px-2 placeholder:text-muted-foreground/30 outline-none"
+      />
+      <Button
+        variant="ghost"
+        size="sm"
+        className="h-6 px-2 text-[11px] shrink-0"
+        onClick={handleInstall}
+        disabled={isInstalling || !url.trim()}
+      >
+        {isInstalling ? <Loader2 className="h-3 w-3 animate-spin" /> : "Install"}
+      </Button>
+    </div>
   )
 }
 
@@ -405,6 +717,7 @@ export function AgentsPluginsTab() {
 
   const approveAllMutation = trpc.claudeSettings.approveAllPluginMcpServers.useMutation()
   const revokeAllMutation = trpc.claudeSettings.revokeAllPluginMcpServers.useMutation()
+  const uninstallMutation = trpc.plugins.uninstall.useMutation()
 
   const handleToggleEnabled = useCallback(async (plugin: PluginData, enabled: boolean) => {
     try {
@@ -453,16 +766,20 @@ export function AgentsPluginsTab() {
         disableClickToClose={true}
       >
         <div className="flex flex-col h-full bg-background border-r overflow-hidden" style={{ borderRightWidth: "0.5px" }}>
-          {/* Search */}
-          <div className="px-2 pt-2 flex-shrink-0 flex items-center gap-1.5">
-            <input
-              ref={searchInputRef}
-              placeholder="Search plugins..."
-              value={searchQuery}
-              onChange={(e) => setSearchQuery(e.target.value)}
-              onKeyDown={listKeyDown}
-              className="h-7 w-full rounded-lg text-sm bg-muted border border-input px-3 placeholder:text-muted-foreground/40 outline-none"
-            />
+          {/* Search + Install */}
+          <div className="px-2 pt-2 flex-shrink-0 space-y-1.5">
+            <div className="flex items-center gap-1.5">
+              <input
+                ref={searchInputRef}
+                placeholder="Search plugins..."
+                value={searchQuery}
+                onChange={(e) => setSearchQuery(e.target.value)}
+                onKeyDown={listKeyDown}
+                className="h-7 w-full rounded-lg text-sm bg-muted border border-input px-3 placeholder:text-muted-foreground/40 outline-none"
+              />
+            </div>
+            <CreatePluginSection onCreated={() => refetch()} />
+            <InstallFromUrlSection />
           </div>
           {/* Plugin list */}
           <div ref={listRef} onKeyDown={listKeyDown} tabIndex={-1} className="flex-1 overflow-y-auto px-2 pt-2 pb-2 outline-none">
@@ -538,6 +855,17 @@ export function AgentsPluginsTab() {
             mcpServerStatuses={mcpServerStatuses}
             onMcpAuth={handleMcpAuth}
             isAuthenticating={startOAuthMutation.isPending}
+            onUninstall={async () => {
+              try {
+                await uninstallMutation.mutateAsync({ pluginSource: selectedPlugin.source })
+                toast.success(`Plugin "${selectedPlugin.name}" uninstalled`)
+                setSelectedPluginSource(null)
+                await refetch()
+              } catch (err) {
+                toast.error(`Failed: ${err instanceof Error ? err.message : String(err)}`)
+              }
+            }}
+            onRefetch={() => refetch()}
           />
         ) : (
           <div className="flex flex-col items-center justify-center h-full text-center px-4">

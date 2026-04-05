@@ -29,7 +29,8 @@ import {
 } from "../../../../shared/codex-tool-normalizer"
 import { getClaudeShellEnvironment } from "../../claude/env"
 import { resolveProjectPathFromWorktree } from "../../claude-config"
-import { getDatabase, projects as projectsTable, subChats } from "../../db"
+import { resolvePluginScope } from "../../plugins"
+import { getDatabase, chats, projects as projectsTable, subChats } from "../../db"
 import {
   fetchMcpTools,
   fetchMcpToolsStdio,
@@ -1819,7 +1820,17 @@ export const codexRouter = router({
             const USE_CODEX_SDK_V2 = process.env.USE_CODEX_SDK_V2 !== "legacy"
 
             if (USE_CODEX_SDK_V2) {
-              // Resolve MCP servers from unified layer + Codex CLI
+              // Check for plugin mode
+              let pluginScope: Awaited<ReturnType<typeof resolvePluginScope>> = null
+              const chat = db.select().from(chats).where(eq(chats.id, input.chatId)).get()
+              if (chat?.pluginId) {
+                pluginScope = await resolvePluginScope(chat.pluginId)
+                if (pluginScope) {
+                  console.log(`[codex-v2] Plugin mode active: ${pluginScope.pluginName} (${chat.pluginId})`)
+                }
+              }
+
+              // Resolve MCP servers (plugin mode overrides with plugin-only MCP)
               let mcpServers: Record<string, any> = {}
               try {
                 const mcpLookupPath =
@@ -1854,7 +1865,20 @@ export const codexRouter = router({
                 console.error("[codex] Failed to resolve MCP servers:", mcpError)
               }
 
+              // Plugin mode: override MCP with plugin-only servers
+              if (pluginScope) {
+                mcpServers = pluginScope.mcpServers
+              }
+
               const codexConfig = toCodexSdkConfig(mcpServers)
+
+              // Plugin mode: add skill directory as extra discovery root
+              if (pluginScope?.skillsDir) {
+                ;(codexConfig as any).skills = {
+                  extra_user_roots: [pluginScope.skillsDir],
+                }
+              }
+
               const codexEnv = buildCodexProviderEnv(input.authConfig)
 
               const codex = await getOrCreateCodex({

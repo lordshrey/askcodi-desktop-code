@@ -12,7 +12,6 @@ import {
   isDesktopAtom,
   type SettingsTab,
 } from "../../lib/atoms"
-import { trpc } from "../../lib/trpc"
 import { cn } from "../../lib/utils"
 import {
   BrainFilledIcon,
@@ -67,7 +66,7 @@ const MAIN_TABS = [
   },
 ]
 
-// Advanced tabs (base - without Debug)
+// Advanced tabs — all provider features are unified, no longer gated by Claude connection
 const ADVANCED_TABS_BASE = [
   {
     id: "projects" as SettingsTab,
@@ -79,10 +78,6 @@ const ADVANCED_TABS_BASE = [
     label: "Models",
     icon: BrainFilledIcon,
   },
-]
-
-// Tabs that require Claude Code provider to be connected
-const CLAUDE_CODE_TABS = [
   {
     id: "skills" as SettingsTab,
     label: "Skills",
@@ -154,9 +149,6 @@ export function SettingsSidebar() {
   const setDesktopView = useSetAtom(desktopViewAtom)
   const isDesktop = useAtomValue(isDesktopAtom)
 
-  const { data: claudeCodeIntegration } = trpc.claudeCode.getIntegration.useQuery()
-  const isClaudeCodeConnected = claudeCodeIntegration?.isConnected
-
   // Hide native traffic lights when settings sidebar is shown
   useEffect(() => {
     if (!isDesktop) return
@@ -176,10 +168,7 @@ export function SettingsSidebar() {
     return MAIN_TABS
   }, [showDebugTab])
 
-  const advancedTabs = useMemo(() => {
-    if (isClaudeCodeConnected) return [...ADVANCED_TABS_BASE, ...CLAUDE_CODE_TABS]
-    return ADVANCED_TABS_BASE
-  }, [isClaudeCodeConnected])
+  const advancedTabs = ADVANCED_TABS_BASE
 
   const handleTabClick = (tabId: SettingsTab) => {
     // Handle Beta tab clicks for devtools unlock

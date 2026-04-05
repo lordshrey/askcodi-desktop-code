@@ -11,7 +11,7 @@ import {
   type FileAgent,
 } from "./agent-utils"
 import { discoverInstalledPlugins, getPluginComponentPaths } from "../../plugins"
-import { getEnabledPlugins } from "./claude-settings"
+import { getEnabledPlugins } from "./app-settings"
 
 // Shared procedure for listing agents
 const listAgentsProcedure = publicProcedure

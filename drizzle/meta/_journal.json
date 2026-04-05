@@ -78,6 +78,13 @@
       "when": 1772802078905,
       "tag": "0010_brown_edwin_jarvis",
       "breakpoints": true
+    },
+    {
+      "idx": 11,
+      "version": "6",
+      "when": 1775310916000,
+      "tag": "0011_plugin_mode",
+      "breakpoints": true
     }
   ]
 }

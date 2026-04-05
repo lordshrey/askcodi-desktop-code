@@ -50,13 +50,14 @@ import {
   type McpToolInfo,
 } from "../../mcp-auth"
 import { fetchOAuthMetadata, getMcpBaseUrl } from "../../oauth"
-import { discoverPluginMcpServers } from "../../plugins"
+import { discoverPluginMcpServers, resolvePluginScope } from "../../plugins"
+import { buildPluginSystemPrompt } from "../../plugins/scope-builder"
 import { publicProcedure, router } from "../index"
 import { buildAgentsOption } from "./agent-utils"
 import {
   getApprovedPluginMcpServers,
   getEnabledPlugins,
-} from "./claude-settings"
+} from "./app-settings"
 
 /**
  * Parse @[agent:name], @[skill:name], and @[tool:servername] mentions from prompt text
@@ -1238,6 +1239,39 @@ export const claudeRouter = router({
               )
             }
 
+            // Plugin mode: scope agent to only the active plugin's capabilities
+            let pluginSystemPrompt: string | undefined
+            let pluginSettingSources: string[] | undefined
+            let pluginAgents: Record<string, any> | undefined
+
+            if (input.chatId) {
+              const chat = db.select().from(chats).where(eq(chats.id, input.chatId)).get()
+              if (chat?.pluginId) {
+                const pluginScope = await resolvePluginScope(chat.pluginId)
+                if (pluginScope) {
+                  console.log(`[claude] Plugin mode active: ${pluginScope.pluginName} (${chat.pluginId})`)
+                  // Override MCP to only plugin's servers
+                  mcpServersForSdk = pluginScope.mcpServers
+                  // Disable default skill discovery — plugin skills injected via system prompt
+                  pluginSettingSources = []
+                  // Build system prompt with plugin's skills content
+                  pluginSystemPrompt = await buildPluginSystemPrompt(pluginScope)
+                  // Load plugin agents
+                  if (pluginScope.agentsDir) {
+                    const { buildAgentsOption } = await import("./agent-utils")
+                    // Scan all agents in the plugin directory
+                    const agentFiles = await fs.readdir(pluginScope.agentsDir).catch(() => [])
+                    const agentNames = (agentFiles as string[])
+                      .filter((f) => f.endsWith(".md"))
+                      .map((f) => f.replace(".md", ""))
+                    if (agentNames.length > 0) {
+                      pluginAgents = await buildAgentsOption(agentNames, pluginScope.agentsDir)
+                    }
+                  }
+                }
+              }
+            }
+
             // Check if user has existing API key or proxy configured in their shell environment
             // If so, use that instead of OAuth (allows using custom API proxies)
             // Based on PR #29 by @sa4hnd
@@ -1585,12 +1619,19 @@ ${prompt}
             }
 
             // System prompt config - use preset for both Claude and Ollama
-            // If AGENTS.md exists, append its content to the system prompt
-            const systemPromptConfig = agentsMdContent
+            // If AGENTS.md exists, append its content. If plugin mode, append plugin skills.
+            const systemPromptParts: string[] = []
+            if (agentsMdContent) {
+              systemPromptParts.push(`# AGENTS.md\nThe following are the project's AGENTS.md instructions:\n\n${agentsMdContent}`)
+            }
+            if (pluginSystemPrompt) {
+              systemPromptParts.push(pluginSystemPrompt)
+            }
+            const systemPromptConfig = systemPromptParts.length > 0
               ? {
                   type: "preset" as const,
                   preset: "claude_code" as const,
-                  append: `\n\n# AGENTS.md\nThe following are the project's AGENTS.md instructions:\n\n${agentsMdContent}`,
+                  append: `\n\n${systemPromptParts.join("\n\n")}`,
                 }
               : {
                   type: "preset" as const,
@@ -1603,14 +1644,13 @@ ${prompt}
                 abortController, // Must be inside options!
                 cwd: input.cwd,
                 systemPrompt: systemPromptConfig,
-                // Register mentioned agents with SDK via options.agents (skip for Ollama - not supported)
-                ...(!isUsingOllama &&
-                  Object.keys(agentsOption).length > 0 && {
-                    agents: agentsOption,
-                  }),
-                // Pass filtered MCP servers (only working/unknown ones, skip failed/needs-auth)
-                ...(mcpServersFiltered &&
-                  Object.keys(mcpServersFiltered).length > 0 && {
+                // Register agents: plugin agents override @mention agents
+                ...(!isUsingOllama && {
+                  agents: pluginAgents ?? (Object.keys(agentsOption).length > 0 ? agentsOption : undefined),
+                }),
+                // MCP servers: plugin MCP overrides merged MCP
+                ...((mcpServersFiltered || pluginAgents) &&
+                  Object.keys(mcpServersFiltered || {}).length > 0 && {
                     mcpServers: mcpServersFiltered,
                   }),
                 env: finalEnv,
@@ -1622,9 +1662,9 @@ ${prompt}
                   allowDangerouslySkipPermissions: true,
                 }),
                 includePartialMessages: true,
-                // Load skills from project and user directories (skip for Ollama - not supported)
+                // Skills: plugin mode disables auto-discovery, injects skills via prompt
                 ...(!isUsingOllama && {
-                  settingSources: ["project" as const, "user" as const],
+                  settingSources: pluginSettingSources ?? ["project" as const, "user" as const],
                 }),
                 canUseTool: async (
                   toolName: string,

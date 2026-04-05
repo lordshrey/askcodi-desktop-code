@@ -20,7 +20,7 @@ import { discoverPluginMcpServers } from "./plugins"
 import {
   getApprovedPluginMcpServers,
   getEnabledPlugins,
-} from "./trpc/routers/claude-settings"
+} from "./trpc/routers/app-settings"
 
 // ---------------------------------------------------------------------------
 // Caching infrastructure (moved from claude.ts)

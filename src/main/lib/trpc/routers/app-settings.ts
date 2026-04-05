@@ -4,7 +4,10 @@ import * as os from "os"
 import { z } from "zod"
 import { router, publicProcedure } from "../index"
 
-const CLAUDE_SETTINGS_PATH = path.join(os.homedir(), ".claude", "settings.json")
+// App-level settings (unified across all providers)
+const APP_SETTINGS_PATH = path.join(os.homedir(), ".askcodi", "settings.json")
+// Legacy path for backward compatibility migration
+const LEGACY_SETTINGS_PATH = path.join(os.homedir(), ".claude", "settings.json")
 
 // Cache for enabled plugins to avoid repeated filesystem reads
 let enabledPluginsCache: { plugins: string[]; timestamp: number } | null = null
@@ -31,15 +34,31 @@ export function invalidateApprovedMcpCache(): void {
 }
 
 /**
- * Read Claude settings.json file
- * Returns empty object if file doesn't exist
+ * Read app settings.json file.
+ * Checks ~/.askcodi/settings.json first, falls back to legacy ~/.claude/settings.json.
+ * On first read from legacy, migrates to new path.
  */
-async function readClaudeSettings(): Promise<Record<string, unknown>> {
+async function readAppSettings(): Promise<Record<string, unknown>> {
+  // Try new path first
   try {
-    const content = await fs.readFile(CLAUDE_SETTINGS_PATH, "utf-8")
+    const content = await fs.readFile(APP_SETTINGS_PATH, "utf-8")
     return JSON.parse(content)
-  } catch (error) {
-    // File doesn't exist or is invalid JSON
+  } catch {
+    // New path doesn't exist, try legacy
+  }
+
+  // Try legacy path and migrate if found
+  try {
+    const content = await fs.readFile(LEGACY_SETTINGS_PATH, "utf-8")
+    const settings = JSON.parse(content)
+    // Migrate: write to new path
+    try {
+      await writeAppSettings(settings)
+    } catch {
+      // Migration write failed, still return the data
+    }
+    return settings
+  } catch {
     return {}
   }
 }
@@ -56,7 +75,7 @@ export async function getEnabledPlugins(): Promise<string[]> {
     return enabledPluginsCache.plugins
   }
 
-  const settings = await readClaudeSettings()
+  const settings = await readAppSettings()
   const plugins = Array.isArray(settings.enabledPlugins) ? settings.enabledPlugins as string[] : []
 
   enabledPluginsCache = { plugins, timestamp: Date.now() }
@@ -75,7 +94,7 @@ export async function getApprovedPluginMcpServers(): Promise<string[]> {
     return approvedMcpCache.servers
   }
 
-  const settings = await readClaudeSettings()
+  const settings = await readAppSettings()
   const servers = Array.isArray(settings.approvedPluginMcpServers)
     ? settings.approvedPluginMcpServers as string[]
     : []
@@ -94,22 +113,22 @@ export async function isPluginMcpApproved(pluginSource: string, serverName: stri
 }
 
 /**
- * Write Claude settings.json file
- * Creates the .claude directory if it doesn't exist
+ * Write app settings.json file.
+ * Writes to ~/.askcodi/settings.json (creates directory if needed).
  */
-async function writeClaudeSettings(settings: Record<string, unknown>): Promise<void> {
-  const dir = path.dirname(CLAUDE_SETTINGS_PATH)
+async function writeAppSettings(settings: Record<string, unknown>): Promise<void> {
+  const dir = path.dirname(APP_SETTINGS_PATH)
   await fs.mkdir(dir, { recursive: true })
-  await fs.writeFile(CLAUDE_SETTINGS_PATH, JSON.stringify(settings, null, 2), "utf-8")
+  await fs.writeFile(APP_SETTINGS_PATH, JSON.stringify(settings, null, 2), "utf-8")
 }
 
-export const claudeSettingsRouter = router({
+export const appSettingsRouter = router({
   /**
    * Get the includeCoAuthoredBy setting
    * Returns true if setting is not explicitly set to false
    */
   getIncludeCoAuthoredBy: publicProcedure.query(async () => {
-    const settings = await readClaudeSettings()
+    const settings = await readAppSettings()
     // Default is true (include co-authored-by)
     // Only return false if explicitly set to false
     return settings.includeCoAuthoredBy !== false
@@ -121,7 +140,7 @@ export const claudeSettingsRouter = router({
   setIncludeCoAuthoredBy: publicProcedure
     .input(z.object({ enabled: z.boolean() }))
     .mutation(async ({ input }) => {
-      const settings = await readClaudeSettings()
+      const settings = await readAppSettings()
 
       if (input.enabled) {
         // Remove the setting to use default (true)
@@ -131,7 +150,7 @@ export const claudeSettingsRouter = router({
         settings.includeCoAuthoredBy = false
       }
 
-      await writeClaudeSettings(settings)
+      await writeAppSettings(settings)
       return { success: true }
     }),
 
@@ -155,7 +174,7 @@ export const claudeSettingsRouter = router({
       })
     )
     .mutation(async ({ input }) => {
-      const settings = await readClaudeSettings()
+      const settings = await readAppSettings()
       const enabledPlugins = Array.isArray(settings.enabledPlugins)
         ? (settings.enabledPlugins as string[])
         : []
@@ -168,7 +187,7 @@ export const claudeSettingsRouter = router({
       }
 
       settings.enabledPlugins = enabledPlugins
-      await writeClaudeSettings(settings)
+      await writeAppSettings(settings)
       invalidateEnabledPluginsCache()
       return { success: true }
     }),
@@ -187,7 +206,7 @@ export const claudeSettingsRouter = router({
   approvePluginMcpServer: publicProcedure
     .input(z.object({ identifier: z.string() }))
     .mutation(async ({ input }) => {
-      const settings = await readClaudeSettings()
+      const settings = await readAppSettings()
       const approved = Array.isArray(settings.approvedPluginMcpServers)
         ? (settings.approvedPluginMcpServers as string[])
         : []
@@ -197,7 +216,7 @@ export const claudeSettingsRouter = router({
       }
 
       settings.approvedPluginMcpServers = approved
-      await writeClaudeSettings(settings)
+      await writeAppSettings(settings)
       invalidateApprovedMcpCache()
       return { success: true }
     }),
@@ -209,7 +228,7 @@ export const claudeSettingsRouter = router({
   revokePluginMcpServer: publicProcedure
     .input(z.object({ identifier: z.string() }))
     .mutation(async ({ input }) => {
-      const settings = await readClaudeSettings()
+      const settings = await readAppSettings()
       const approved = Array.isArray(settings.approvedPluginMcpServers)
         ? (settings.approvedPluginMcpServers as string[])
         : []
@@ -220,7 +239,7 @@ export const claudeSettingsRouter = router({
       }
 
       settings.approvedPluginMcpServers = approved
-      await writeClaudeSettings(settings)
+      await writeAppSettings(settings)
       invalidateApprovedMcpCache()
       return { success: true }
     }),
@@ -235,7 +254,7 @@ export const claudeSettingsRouter = router({
       serverNames: z.array(z.string()),
     }))
     .mutation(async ({ input }) => {
-      const settings = await readClaudeSettings()
+      const settings = await readAppSettings()
       const approved = Array.isArray(settings.approvedPluginMcpServers)
         ? (settings.approvedPluginMcpServers as string[])
         : []
@@ -248,7 +267,7 @@ export const claudeSettingsRouter = router({
       }
 
       settings.approvedPluginMcpServers = approved
-      await writeClaudeSettings(settings)
+      await writeAppSettings(settings)
       invalidateApprovedMcpCache()
       return { success: true }
     }),
@@ -262,14 +281,14 @@ export const claudeSettingsRouter = router({
       pluginSource: z.string(),
     }))
     .mutation(async ({ input }) => {
-      const settings = await readClaudeSettings()
+      const settings = await readAppSettings()
       const approved = Array.isArray(settings.approvedPluginMcpServers)
         ? (settings.approvedPluginMcpServers as string[])
         : []
 
       const prefix = `${input.pluginSource}:`
       settings.approvedPluginMcpServers = approved.filter((id) => !id.startsWith(prefix))
-      await writeClaudeSettings(settings)
+      await writeAppSettings(settings)
       invalidateApprovedMcpCache()
       return { success: true }
     }),

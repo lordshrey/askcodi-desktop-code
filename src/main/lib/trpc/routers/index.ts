@@ -3,7 +3,7 @@ import { projectsRouter } from "./projects"
 import { chatsRouter } from "./chats"
 import { claudeRouter } from "./claude"
 import { claudeCodeRouter } from "./claude-code"
-import { claudeSettingsRouter } from "./claude-settings"
+import { appSettingsRouter } from "./app-settings"
 import { anthropicAccountsRouter } from "./anthropic-accounts"
 import { ollamaRouter } from "./ollama"
 import { codexRouter } from "./codex"
@@ -34,7 +34,7 @@ export function createAppRouter(getWindow: () => BrowserWindow | null) {
     chats: chatsRouter,
     claude: claudeRouter,
     claudeCode: claudeCodeRouter,
-    claudeSettings: claudeSettingsRouter,
+    claudeSettings: appSettingsRouter,
     anthropicAccounts: anthropicAccountsRouter,
     ollama: ollamaRouter,
     codex: codexRouter,

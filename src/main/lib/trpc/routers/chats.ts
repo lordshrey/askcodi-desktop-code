@@ -310,6 +310,7 @@ export const chatsRouter = router({
         branchType: z.enum(["local", "remote"]).optional(), // Whether baseBranch is local or remote
         useWorktree: z.boolean().default(true), // If false, work directly in project dir
         mode: z.enum(["plan", "agent"]).default("agent"),
+        pluginId: z.string().optional(), // Plugin mode: scope agent to this plugin
       }),
     )
     .mutation(async ({ input, ctx }) => {
@@ -332,6 +333,7 @@ export const chatsRouter = router({
         .values({
           name: input.name,
           projectId: input.projectId,
+          pluginId: input.pluginId ?? null,
         })
         .returning()
         .get()
@@ -2261,6 +2263,30 @@ export const chatsRouter = router({
           sourceUrl: input.sourceUrl,
           sourceType: input.sourceType,
           sourceIdentifier: input.sourceIdentifier,
+        })
+        .where(eq(chats.id, input.chatId))
+        .returning()
+        .get()
+    }),
+
+  /**
+   * Set or clear plugin mode for a chat.
+   * When set, the agent session is scoped to only that plugin's capabilities.
+   */
+  setPluginMode: publicProcedure
+    .input(
+      z.object({
+        chatId: z.string(),
+        pluginId: z.string().nullable(), // null to clear plugin mode
+      }),
+    )
+    .mutation(({ input }) => {
+      const db = getDatabase()
+      return db
+        .update(chats)
+        .set({
+          pluginId: input.pluginId,
+          updatedAt: new Date(),
         })
         .where(eq(chats.id, input.chatId))
         .returning()

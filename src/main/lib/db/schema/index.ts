@@ -58,6 +58,8 @@ export const chats = sqliteTable("chats", {
   sourceUrl: text("source_url"),
   sourceType: text("source_type"),        // "github-issue" | "github-pr" | "linear-ticket"
   sourceIdentifier: text("source_identifier"), // "#42" or "ENG-123"
+  // Plugin mode (scopes agent to a specific plugin's capabilities)
+  pluginId: text("plugin_id"),            // Plugin source identifier, e.g. "official:stripe-dev"
 }, (table) => [
   index("chats_worktree_path_idx").on(table.worktreePath),
   index("chats_source_url_idx").on(table.sourceUrl),

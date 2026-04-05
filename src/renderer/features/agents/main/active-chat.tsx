@@ -229,6 +229,7 @@ import { ChatTitleEditor } from "../ui/chat-title-editor"
 import { MobileChatHeader } from "../ui/mobile-chat-header"
 import { QuickCommentInput } from "../ui/quick-comment-input"
 import { SubChatSelector } from "../ui/sub-chat-selector"
+import { PluginModeSelector } from "../ui/plugin-mode-selector"
 import { SubChatStatusCard } from "../ui/sub-chat-status-card"
 import { SplitViewContainer } from "../ui/split-view-container"
 import { TextSelectionPopover } from "../ui/text-selection-popover"
@@ -7494,6 +7495,8 @@ Make sure to preserve all functionality from both branches when resolving confli
                         isTerminalOpen={isTerminalSidebarOpen}
                         chatId={chatId}
                       />
+                      {/* Plugin Mode Selector */}
+                      <PluginModeSelector chatId={chatId} />
                       {/* Open Locally button - desktop only, sandbox mode */}
                       {showOpenLocally && (
                         <Tooltip delayDuration={500}>

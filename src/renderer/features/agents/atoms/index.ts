@@ -1171,3 +1171,26 @@ export const fileViewerOpenAtomFamily = atomFamily((chatId: string) =>
     },
   ),
 )
+
+// ============ PLUGIN MODE ============
+
+// Storage for per-chat plugin mode selection
+const chatPluginIdsStorageAtom = atomWithStorage<Record<string, string | null>>(
+  "agents:chatPluginIds",
+  {},
+)
+
+// Per-chat plugin ID atom family
+// null = no plugin mode (normal behavior)
+export const chatPluginIdAtomFamily = atomFamily((chatId: string) =>
+  atom(
+    (get) => {
+      if (!chatId) return null
+      return get(chatPluginIdsStorageAtom)[chatId] ?? null
+    },
+    (get, set, newPluginId: string | null) => {
+      const current = get(chatPluginIdsStorageAtom)
+      set(chatPluginIdsStorageAtom, { ...current, [chatId]: newPluginId })
+    },
+  ),
+)
