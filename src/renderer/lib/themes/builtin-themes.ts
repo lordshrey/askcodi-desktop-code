@@ -9,8 +9,8 @@ import type { VSCodeFullTheme } from "../atoms"
 import { CURSOR_DARK, CURSOR_LIGHT, CURSOR_MIDNIGHT } from "./cursor-themes"
 
 /**
- * AskCodi Dark - Default dark theme matching the app's original design
- * Uses the brand blue (#0034FF) as primary/accent color
+ * AskCodi Dark - Default dark theme aligned with askcodi.com brand
+ * Primary: #73CFA8 (minty green), Accent: #FFDC79 (warm gold)
  */
 const ASKCODI_DARK: VSCodeFullTheme = {
   id: "askcodi-dark",
@@ -18,63 +18,63 @@ const ASKCODI_DARK: VSCodeFullTheme = {
   type: "dark",
   source: "builtin",
   colors: {
-    "editor.background": "#0a0a0a", // 240 10% 3.9%
-    "editor.foreground": "#f4f4f5", // 240 4.8% 95.9%
-    "foreground": "#f4f4f5",
-    "sideBar.background": "#121212", // original tl-background (0 0% 7%)
-    "sideBar.foreground": "#f4f4f5",
-    "sideBar.border": "#27272a", // 240 3.7% 15.9%
-    "activityBar.background": "#0a0a0a",
-    "activityBar.foreground": "#f4f4f5",
-    "panel.background": "#121212", // match sidebar
-    "panel.border": "#27272a",
-    "tab.activeBackground": "#0a0a0a",
-    "tab.inactiveBackground": "#18181b", // 240 5.9% 10%
-    "tab.inactiveForeground": "#a1a1aa", // 240 4.4% 58%
-    "editorGroupHeader.tabsBackground": "#18181b",
-    "dropdown.background": "#171717", // popover
-    "dropdown.foreground": "#fafafa",
-    "input.background": "#121212", // same as sidebar/tl-background
-    "input.border": "#27272a",
-    "input.foreground": "#f4f4f5",
-    "focusBorder": "#0034ff", // primary blue
-    "textLink.foreground": "#0034ff",
-    "textLink.activeForeground": "#3366ff",
-    "list.activeSelectionBackground": "#27272a",
-    "list.hoverBackground": "#18181b",
-    "editor.selectionBackground": "#0034ff44",
-    "editorLineNumber.foreground": "#52525b",
-    "descriptionForeground": "#a1a1aa",
-    "errorForeground": "#ef4444",
-    "button.background": "#0034ff", // primary
-    "button.foreground": "#ffffff",
-    "button.secondaryBackground": "#27272a",
-    "button.secondaryForeground": "#fafafa",
+    "editor.background": "#1a1d23", // warm blue-gray (matches askcodi.com)
+    "editor.foreground": "#e5e5e5",
+    "foreground": "#e5e5e5",
+    "sideBar.background": "#14161b", // deep bg
+    "sideBar.foreground": "#e5e5e5",
+    "sideBar.border": "#333333", // warm border
+    "activityBar.background": "#14161b",
+    "activityBar.foreground": "#e5e5e5",
+    "panel.background": "#14161b",
+    "panel.border": "#333333",
+    "tab.activeBackground": "#1a1d23",
+    "tab.inactiveBackground": "#14161b",
+    "tab.inactiveForeground": "#666666",
+    "editorGroupHeader.tabsBackground": "#14161b",
+    "dropdown.background": "#2f3436", // surface
+    "dropdown.foreground": "#e5e5e5",
+    "input.background": "#14161b",
+    "input.border": "#333333",
+    "input.foreground": "#e5e5e5",
+    "focusBorder": "#73cfa8", // primary green
+    "textLink.foreground": "#73cfa8",
+    "textLink.activeForeground": "#5ec298",
+    "list.activeSelectionBackground": "#73cfa820", // primary subtle
+    "list.hoverBackground": "#2f3436",
+    "editor.selectionBackground": "#73cfa840",
+    "editorLineNumber.foreground": "#666666",
+    "descriptionForeground": "#a0a0a0",
+    "errorForeground": "#ff6b6b",
+    "button.background": "#73cfa8", // primary green
+    "button.foreground": "#0a0a0a",
+    "button.secondaryBackground": "#2f3436",
+    "button.secondaryForeground": "#e5e5e5",
     // Terminal colors
-    "terminal.background": "#0a0a0a",
-    "terminal.foreground": "#f4f4f5",
-    "terminal.ansiBlack": "#18181b",
-    "terminal.ansiRed": "#ef4444",
-    "terminal.ansiGreen": "#22c55e",
-    "terminal.ansiYellow": "#eab308",
-    "terminal.ansiBlue": "#3b82f6",
-    "terminal.ansiMagenta": "#a855f7",
+    "terminal.background": "#1a1d23",
+    "terminal.foreground": "#e5e5e5",
+    "terminal.ansiBlack": "#14161b",
+    "terminal.ansiRed": "#ff6b6b",
+    "terminal.ansiGreen": "#73cfa8",
+    "terminal.ansiYellow": "#ffdc79",
+    "terminal.ansiBlue": "#5e9bff",
+    "terminal.ansiMagenta": "#8f9aff",
     "terminal.ansiCyan": "#06b6d4",
-    "terminal.ansiWhite": "#f4f4f5",
-    "terminal.ansiBrightBlack": "#71717a",
-    "terminal.ansiBrightRed": "#f87171",
-    "terminal.ansiBrightGreen": "#4ade80",
-    "terminal.ansiBrightYellow": "#facc15",
-    "terminal.ansiBrightBlue": "#60a5fa",
-    "terminal.ansiBrightMagenta": "#c084fc",
+    "terminal.ansiWhite": "#e5e5e5",
+    "terminal.ansiBrightBlack": "#666666",
+    "terminal.ansiBrightRed": "#ff8080",
+    "terminal.ansiBrightGreen": "#8fdcbb",
+    "terminal.ansiBrightYellow": "#ffe599",
+    "terminal.ansiBrightBlue": "#7db0ff",
+    "terminal.ansiBrightMagenta": "#a8b0ff",
     "terminal.ansiBrightCyan": "#22d3ee",
-    "terminal.ansiBrightWhite": "#fafafa",
+    "terminal.ansiBrightWhite": "#f5f5f5",
   },
 }
 
 /**
- * AskCodi Light - Default light theme matching the app's original design
- * Uses the brand blue (#0034FF) as primary/accent color
+ * AskCodi Light - Light theme aligned with askcodi.com brand
+ * Primary: #4DAE82 (darker green for light bg), Accent: #D4A843 (darker gold)
  */
 const ASKCODI_LIGHT: VSCodeFullTheme = {
   id: "askcodi-light",
@@ -83,56 +83,56 @@ const ASKCODI_LIGHT: VSCodeFullTheme = {
   source: "builtin",
   colors: {
     "editor.background": "#ffffff",
-    "editor.foreground": "#0a0a0a", // 240 10% 3.9%
-    "foreground": "#0a0a0a",
-    "sideBar.background": "#FAFAFA", // original tl-background (0 0% 98%)
-    "sideBar.foreground": "#0a0a0a",
-    "sideBar.border": "#e4e4e7", // 240 5.9% 90%
-    "activityBar.background": "#ffffff",
-    "activityBar.foreground": "#0a0a0a",
-    "panel.background": "#FAFAFA", // match sidebar
-    "panel.border": "#e4e4e7",
+    "editor.foreground": "#1a1d23",
+    "foreground": "#1a1d23",
+    "sideBar.background": "#f5f5f7", // deep bg light
+    "sideBar.foreground": "#1a1d23",
+    "sideBar.border": "#e0e0e0",
+    "activityBar.background": "#f5f5f7",
+    "activityBar.foreground": "#1a1d23",
+    "panel.background": "#f5f5f7",
+    "panel.border": "#e0e0e0",
     "tab.activeBackground": "#ffffff",
-    "tab.inactiveBackground": "#f4f4f5", // 240 4.8% 95.9%
-    "tab.inactiveForeground": "#71717a", // 240 3.8% 46.1%
-    "editorGroupHeader.tabsBackground": "#f4f4f5",
+    "tab.inactiveBackground": "#f5f5f7",
+    "tab.inactiveForeground": "#888888",
+    "editorGroupHeader.tabsBackground": "#f5f5f7",
     "dropdown.background": "#ffffff",
-    "dropdown.foreground": "#0a0a0a",
-    "input.background": "#FAFAFA", // same as sidebar/tl-background
-    "input.border": "#e4e4e7",
-    "input.foreground": "#0a0a0a",
-    "focusBorder": "#0034ff", // primary blue
-    "textLink.foreground": "#0034ff",
-    "textLink.activeForeground": "#0028cc",
-    "list.activeSelectionBackground": "#f4f4f5",
-    "list.hoverBackground": "#f4f4f5",
-    "editor.selectionBackground": "#0034ff33",
-    "editorLineNumber.foreground": "#a1a1aa",
-    "descriptionForeground": "#71717a",
+    "dropdown.foreground": "#1a1d23",
+    "input.background": "#f5f5f7",
+    "input.border": "#d4d4d4",
+    "input.foreground": "#1a1d23",
+    "focusBorder": "#4dae82", // darker green for light mode
+    "textLink.foreground": "#4dae82",
+    "textLink.activeForeground": "#3d9a72",
+    "list.activeSelectionBackground": "#4dae8218",
+    "list.hoverBackground": "#f0f0f2",
+    "editor.selectionBackground": "#4dae8230",
+    "editorLineNumber.foreground": "#888888",
+    "descriptionForeground": "#555555",
     "errorForeground": "#dc2626",
-    "button.background": "#0034ff", // primary
+    "button.background": "#4dae82", // primary green (light)
     "button.foreground": "#ffffff",
-    "button.secondaryBackground": "#f4f4f5",
-    "button.secondaryForeground": "#18181b",
+    "button.secondaryBackground": "#f0f0f2",
+    "button.secondaryForeground": "#1a1d23",
     // Terminal colors
-    "terminal.background": "#fafafa",
-    "terminal.foreground": "#0a0a0a",
-    "terminal.ansiBlack": "#18181b",
+    "terminal.background": "#f5f5f7",
+    "terminal.foreground": "#1a1d23",
+    "terminal.ansiBlack": "#1a1d23",
     "terminal.ansiRed": "#dc2626",
     "terminal.ansiGreen": "#16a34a",
     "terminal.ansiYellow": "#ca8a04",
     "terminal.ansiBlue": "#2563eb",
     "terminal.ansiMagenta": "#9333ea",
     "terminal.ansiCyan": "#0891b2",
-    "terminal.ansiWhite": "#f4f4f5",
-    "terminal.ansiBrightBlack": "#52525b",
+    "terminal.ansiWhite": "#f5f5f7",
+    "terminal.ansiBrightBlack": "#555555",
     "terminal.ansiBrightRed": "#ef4444",
     "terminal.ansiBrightGreen": "#22c55e",
     "terminal.ansiBrightYellow": "#eab308",
     "terminal.ansiBrightBlue": "#3b82f6",
     "terminal.ansiBrightMagenta": "#a855f7",
     "terminal.ansiBrightCyan": "#06b6d4",
-    "terminal.ansiBrightWhite": "#fafafa",
+    "terminal.ansiBrightWhite": "#ffffff",
   },
 }
 

@@ -23,85 +23,73 @@ const TERMINAL_FONT_FAMILY = [
  * Dark terminal theme synchronized with the app's design system.
  * Colors are based on Tailwind's zinc palette and CSS variables.
  * 
- * Dark theme values:
- * - --background: hsl(240, 10%, 3.9%) = #0a0a0a
- * - --foreground: hsl(240, 4.8%, 95.9%) = #f4f4f5
- * - --tl-background: hsl(0, 0%, 7%) = #121212
- * - --muted-foreground: hsl(240, 4.4%, 58%) = #8c8c94
- * - --primary: #0034FF
+ * Dark theme values (aligned with askcodi.com brand):
+ * - --background: #1A1D23 (warm blue-gray)
+ * - --foreground: #E5E5E5
+ * - --tl-background: #14161B (deep bg)
+ * - --primary: #73CFA8 (minty green)
  */
 export const TERMINAL_THEME_DARK: ITheme = {
-  // Background matches --tl-background (timeline/content area)
-  background: "#121212",
-  foreground: "#f4f4f5",
-  
-  // Cursor matches foreground for clean look
-  cursor: "#f4f4f5",
-  cursorAccent: "#121212",
-  
-  // Selection - subtle highlight
-  selectionBackground: "#3f3f46",
+  background: "#14161b",
+  foreground: "#e5e5e5",
+
+  cursor: "#e5e5e5",
+  cursorAccent: "#14161b",
+
+  selectionBackground: "#444444",
   selectionForeground: "#ffffff",
-  
-  // ANSI colors (zinc palette + Tailwind colors)
-  black: "#18181b",          // zinc-900
-  red: "#ef4444",            // red-500
-  green: "#22c55e",          // green-500
-  yellow: "#eab308",         // yellow-500
-  blue: "#0034FF",           // --primary (brand blue)
-  magenta: "#a855f7",        // purple-500
-  cyan: "#06b6d4",           // cyan-500
-  white: "#f4f4f5",          // zinc-100
-  
-  // Bright variants
-  brightBlack: "#71717a",    // zinc-500 (matches --muted-foreground)
-  brightRed: "#f87171",      // red-400
-  brightGreen: "#4ade80",    // green-400
-  brightYellow: "#facc15",   // yellow-400
-  brightBlue: "#3b82f6",     // blue-500
-  brightMagenta: "#c084fc",  // purple-400
-  brightCyan: "#22d3ee",     // cyan-400
-  brightWhite: "#fafafa",    // zinc-50
+
+  black: "#14161b",
+  red: "#ff6b6b",
+  green: "#73cfa8",          // --primary (brand green)
+  yellow: "#ffdc79",         // --accent (brand gold)
+  blue: "#5e9bff",           // brand blue
+  magenta: "#8f9aff",        // brand purple
+  cyan: "#06b6d4",
+  white: "#e5e5e5",
+
+  brightBlack: "#666666",
+  brightRed: "#ff8080",
+  brightGreen: "#8fdcbb",
+  brightYellow: "#ffe599",
+  brightBlue: "#7db0ff",
+  brightMagenta: "#a8b0ff",
+  brightCyan: "#22d3ee",
+  brightWhite: "#f5f5f5",
 }
 
 /**
  * Light terminal theme synchronized with the app's design system.
  * 
- * Light theme values:
- * - --background: hsl(0, 0%, 100%) = #ffffff
- * - --foreground: hsl(240, 10%, 3.9%) = #0a0a0a
- * - --tl-background: hsl(0, 0%, 98%) = #fafafa
- * - --muted-foreground: hsl(240, 3.8%, 46.1%) = #717179
- * - --primary: #0034FF
+ * Light theme values (aligned with askcodi.com brand):
+ * - --background: #FFFFFF
+ * - --foreground: #1A1D23
+ * - --tl-background: #F5F5F7
+ * - --primary: #4DAE82 (darker green for light mode)
  */
 export const TERMINAL_THEME_LIGHT: ITheme = {
-  // Background matches --tl-background (timeline/content area)
-  background: "#fafafa",
-  foreground: "#0a0a0a",
-  
-  // Cursor matches foreground for clean look
-  cursor: "#0a0a0a",
-  cursorAccent: "#fafafa",
-  
-  // Selection - subtle highlight
-  selectionBackground: "#d4d4d8",
-  selectionForeground: "#0a0a0a",
-  
-  // ANSI colors (adjusted for light background)
-  black: "#18181b",          // zinc-900
-  red: "#dc2626",            // red-600 (darker for light bg)
-  green: "#16a34a",          // green-600
-  yellow: "#ca8a04",         // yellow-600
-  blue: "#0034FF",           // --primary (brand blue)
-  magenta: "#9333ea",        // purple-600
-  cyan: "#0891b2",           // cyan-600
-  white: "#f4f4f5",          // zinc-100
-  
-  // Bright variants (standard colors work well on light)
-  brightBlack: "#52525b",    // zinc-600
-  brightRed: "#ef4444",      // red-500
-  brightGreen: "#22c55e",    // green-500
-  brightYellow: "#eab308",   // yellow-500
+  background: "#f5f5f7",
+  foreground: "#1a1d23",
+
+  cursor: "#1a1d23",
+  cursorAccent: "#f5f5f7",
+
+  selectionBackground: "#d4d4d4",
+  selectionForeground: "#1a1d23",
+
+  black: "#1a1d23",
+  red: "#dc2626",
+  green: "#16a34a",
+  yellow: "#ca8a04",
+  blue: "#2563eb",           // standard blue
+  magenta: "#9333ea",
+  cyan: "#0891b2",
+  white: "#f5f5f7",
+
+  brightBlack: "#555555",
+  brightRed: "#ef4444",
+  brightGreen: "#22c55e",
+  brightYellow: "#eab308",
   brightBlue: "#3b82f6",     // blue-500
   brightMagenta: "#a855f7",  // purple-500
   brightCyan: "#06b6d4",     // cyan-500

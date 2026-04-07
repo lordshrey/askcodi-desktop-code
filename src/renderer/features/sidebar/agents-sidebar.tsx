@@ -593,7 +593,7 @@ const AgentChatItem = React.memo(function AgentChatItem({
                 >
                   <TypewriterText
                     text={chatName || ""}
-                    placeholder="New workspace"
+                    placeholder="New task"
                     id={chatId}
                     isJustCreated={isJustCreated}
                     showPlaceholder={true}
@@ -657,7 +657,7 @@ const AgentChatItem = React.memo(function AgentChatItem({
                       }}
                       tabIndex={-1}
                       className="absolute inset-0 flex items-center justify-center text-muted-foreground hover:text-foreground active:text-foreground transition-[opacity,transform,color] duration-150 ease-out opacity-0 scale-95 pointer-events-none group-hover:opacity-100 group-hover:scale-100 group-hover:pointer-events-auto active:scale-[0.97]"
-                      aria-label="Archive workspace"
+                      aria-label="Archive task"
                     >
                       <ArchiveIcon className="h-3.5 w-3.5" />
                     </button>
@@ -700,8 +700,8 @@ const AgentChatItem = React.memo(function AgentChatItem({
               <>
                 <ContextMenuItem onClick={areAllSelectedPinned ? onBulkUnpin : onBulkPin}>
                   {areAllSelectedPinned
-                    ? `Unpin ${selectedChatIdsSize} ${pluralize(selectedChatIdsSize, "workspace")}`
-                    : `Pin ${selectedChatIdsSize} ${pluralize(selectedChatIdsSize, "workspace")}`}
+                    ? `Unpin ${selectedChatIdsSize} ${pluralize(selectedChatIdsSize, "task")}`
+                    : `Pin ${selectedChatIdsSize} ${pluralize(selectedChatIdsSize, "task")}`}
                 </ContextMenuItem>
                 <ContextMenuSeparator />
               </>
@@ -709,7 +709,7 @@ const AgentChatItem = React.memo(function AgentChatItem({
             <ContextMenuItem onClick={onBulkArchive} disabled={archiveBatchPending}>
               {archiveBatchPending
                 ? "Archiving..."
-                : `Archive ${selectedChatIdsSize} ${pluralize(selectedChatIdsSize, "workspace")}`}
+                : `Archive ${selectedChatIdsSize} ${pluralize(selectedChatIdsSize, "task")}`}
             </ContextMenuItem>
           </>
         ) : (
@@ -723,10 +723,10 @@ const AgentChatItem = React.memo(function AgentChatItem({
               </>
             )}
             <ContextMenuItem onClick={() => onTogglePin(chatId)}>
-              {isPinned ? "Unpin workspace" : "Pin workspace"}
+              {isPinned ? "Unpin task" : "Pin task"}
             </ContextMenuItem>
             <ContextMenuItem onClick={() => onRenameClick({ id: chatId, name: chatName, isRemote })}>
-              Rename workspace
+              Rename task
             </ContextMenuItem>
             {chatBranch && (
               <ContextMenuItem onClick={() => onCopyBranch(chatBranch)}>
@@ -734,7 +734,7 @@ const AgentChatItem = React.memo(function AgentChatItem({
               </ContextMenuItem>
             )}
             <ContextMenuSub>
-              <ContextMenuSubTrigger>Export workspace</ContextMenuSubTrigger>
+              <ContextMenuSubTrigger>Export task</ContextMenuSubTrigger>
               <ContextMenuSubContent sideOffset={6} alignOffset={-4}>
                 <ContextMenuItem onClick={() => exportChat({ chatId: isRemote ? chatId.replace(/^remote_/, '') : chatId, format: "markdown", isRemote })}>
                   Download as Markdown
@@ -761,7 +761,7 @@ const AgentChatItem = React.memo(function AgentChatItem({
               <ContextMenuItem onClick={async () => {
                 const result = await window.desktopApi?.newWindow({ chatId })
                 if (result?.blocked) {
-                  toast.info("This workspace is already open in another window", {
+                  toast.info("This task is already open in another window", {
                     description: "Switching to the existing window.",
                     duration: 3000,
                   })
@@ -772,7 +772,7 @@ const AgentChatItem = React.memo(function AgentChatItem({
             )}
             <ContextMenuSeparator />
             <ContextMenuItem onClick={() => onArchive(chatId)} className="justify-between">
-              Archive workspace
+              Archive task
               {archiveWorkspaceHotkey && <Kbd>{archiveWorkspaceHotkey}</Kbd>}
             </ContextMenuItem>
             <ContextMenuItem
@@ -2221,7 +2221,9 @@ export function AgentsSidebar({
   // Get clerk username
   const clerkUsername = clerkUser?.username
 
-  // Filter and separate pinned/unpinned agents
+  // Filter and separate pinned/active/all tasks
+  // Sidebar shows only "active" tasks (recently active, loading, pending, or selected)
+  // All tasks are available on the kanban/list view via project click
   const { pinnedAgents, unpinnedAgents, filteredChats } = useMemo(() => {
     if (!agentChats)
       return { pinnedAgents: [], unpinnedAgents: [], filteredChats: [] }
@@ -2235,12 +2237,35 @@ export function AgentsSidebar({
     const pinned = filtered.filter((chat) => pinnedChatIds.has(chat.id))
     const unpinned = filtered.filter((chat) => !pinnedChatIds.has(chat.id))
 
+    // When searching, show all results. Otherwise, filter to active tasks only.
+    const activeUnpinned = searchQuery.trim()
+      ? unpinned
+      : unpinned.filter((chat) => {
+          // Currently selected task is always shown
+          if (chat.id === selectedChatId) return true
+          // Has active streaming sub-chat
+          if (loadingSubChats.size > 0) {
+            for (const [, parentId] of loadingSubChats) {
+              if (parentId === chat.id) return true
+            }
+          }
+          // Has unseen changes, pending plans, or pending questions
+          if (unseenChanges.has(chat.id)) return true
+          // Updated within the last 30 minutes
+          if (chat.updatedAt) {
+            const thirtyMinAgo = Date.now() - 30 * 60 * 1000
+            const updatedTime = chat.updatedAt instanceof Date ? chat.updatedAt.getTime() : new Date(chat.updatedAt).getTime()
+            if (updatedTime > thirtyMinAgo) return true
+          }
+          return false
+        })
+
     return {
       pinnedAgents: pinned,
-      unpinnedAgents: unpinned,
-      filteredChats: [...pinned, ...unpinned],
+      unpinnedAgents: activeUnpinned,
+      filteredChats: [...pinned, ...unpinned], // All chats for kanban/search/navigation
     }
-  }, [searchQuery, agentChats, pinnedChatIds])
+  }, [searchQuery, agentChats, pinnedChatIds, selectedChatId, loadingSubChats, unseenChanges])
 
   // Handle bulk archive of selected chats
   const handleBulkArchive = useCallback(() => {
@@ -3073,14 +3098,35 @@ export function AgentsSidebar({
         closeButtonRef={closeButtonRef}
       />
 
-      {/* Search and New Workspace */}
+      {/* Project Name - click to show all tasks */}
+      {selectedProject && (
+        <div className="px-2 pb-2 flex-shrink-0">
+          <button
+            type="button"
+            onClick={() => {
+              setSelectedChatId(null)
+              setDesktopView(null)
+            }}
+            className="w-full text-left px-2 py-1.5 rounded-md hover:bg-foreground/5 transition-colors group"
+          >
+            <div className="text-xs font-semibold text-foreground truncate" style={{ fontFamily: "var(--font-display, 'Sora', sans-serif)" }}>
+              {selectedProject.name || selectedProject.path?.split("/").pop() || "Project"}
+            </div>
+            <div className="text-[10px] text-muted-foreground truncate">
+              {selectedProject.branch || "main"} &middot; {filteredChats.length} tasks
+            </div>
+          </button>
+        </div>
+      )}
+
+      {/* Search and New Task */}
       <div className="px-2 pb-3 flex-shrink-0">
         <div className="space-y-2">
           {/* Search Input */}
           <div className="relative">
             <Input
               ref={searchInputRef}
-              placeholder="Search workspaces..."
+              placeholder="Search tasks..."
               value={searchQuery}
               onChange={(e) => setSearchQuery(e.target.value)}
               onKeyDown={(e) => {
@@ -3133,7 +3179,7 @@ export function AgentsSidebar({
               )}
             />
           </div>
-          {/* New Workspace Button */}
+          {/* New Task Button */}
           <Tooltip delayDuration={500}>
             <TooltipTrigger asChild>
               <ButtonCustom
@@ -3145,11 +3191,11 @@ export function AgentsSidebar({
                   isMobileFullscreen ? "h-10" : "h-7",
                 )}
               >
-                <span className="text-sm font-medium">New Workspace</span>
+                <span className="text-sm font-medium">New Task</span>
               </ButtonCustom>
             </TooltipTrigger>
             <TooltipContent side="right" className="flex flex-col items-start gap-1">
-              <span>Start a new workspace</span>
+              <span>Start a new task</span>
               {newWorkspaceHotkey && (
                 <span className="flex items-center gap-1.5">
                   <Kbd>{newWorkspaceHotkey}</Kbd>
@@ -3213,12 +3259,12 @@ export function AgentsSidebar({
             </div>
           )}
 
-          {/* Chats Section */}
+          {/* Active Tasks Section */}
           {filteredChats.length > 0 ? (
             <div className={cn("mb-4", isMultiSelectMode ? "px-0" : "-mx-1")}>
               {/* Pinned section */}
               <ChatListSection
-                title="Pinned workspaces"
+                title="Pinned"
                 chats={pinnedAgents}
                 selectedChatId={selectedChatId}
                 selectedChatIsRemote={selectedChatIsRemote}
@@ -3261,7 +3307,7 @@ export function AgentsSidebar({
 
               {/* Unpinned section */}
               <ChatListSection
-                title={pinnedAgents.length > 0 ? "Recent workspaces" : "Workspaces"}
+                title={pinnedAgents.length > 0 ? "Active" : "Active"}
                 chats={unpinnedAgents}
                 selectedChatId={selectedChatId}
                 selectedChatIsRemote={selectedChatIsRemote}

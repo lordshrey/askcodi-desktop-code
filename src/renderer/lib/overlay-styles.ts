@@ -37,15 +37,15 @@ export const overlayItemBase =
   "flex items-center gap-1.5 min-h-[32px] py-[5px] px-1.5 mx-1 rounded-md text-sm cursor-default select-none outline-none"
 
 /** Item hover state */
-export const overlayItemHover = "dark:hover:bg-neutral-800 hover:bg-accent hover:text-foreground"
+export const overlayItemHover = "dark:hover:bg-accent hover:bg-accent hover:text-foreground"
 
 /** Item focus state (keyboard navigation) */
 export const overlayItemFocus =
-  "focus:bg-accent dark:focus:bg-neutral-800 focus:text-accent-foreground"
+  "focus:bg-accent dark:focus:bg-accent focus:text-accent-foreground"
 
 /** Radix data-highlighted state (used by DropdownMenu, Select, ContextMenu) */
 export const overlayItemHighlighted =
-  "data-[highlighted]:bg-accent dark:data-[highlighted]:bg-neutral-800 data-[highlighted]:text-accent-foreground"
+  "data-[highlighted]:bg-accent dark:data-[highlighted]:bg-accent data-[highlighted]:text-accent-foreground"
 
 /** Item disabled state */
 export const overlayItemDisabled =
@@ -66,7 +66,7 @@ export const overlayItemWithIcon = `${overlayItem} [&_svg]:pointer-events-none [
 
 /** Sub-trigger open state */
 export const overlaySubTriggerOpen =
-  "data-[state=open]:bg-accent dark:data-[state=open]:bg-neutral-800"
+  "data-[state=open]:bg-accent dark:data-[state=open]:bg-accent"
 
 /** Combined sub-trigger styles */
 export const overlaySubTrigger = `${overlayItemWithIcon} ${overlaySubTriggerOpen}`
@@ -77,7 +77,7 @@ export const overlaySubTrigger = `${overlayItemWithIcon} ${overlaySubTriggerOpen
 
 /** Checkbox/Radio item base (with left padding for indicator) */
 export const overlayCheckableItem =
-  "relative flex items-center gap-1.5 min-h-[32px] py-[5px] pl-7 pr-1.5 mx-1 rounded-md text-sm cursor-default select-none outline-none transition-colors dark:hover:bg-neutral-800 hover:bg-accent hover:text-foreground focus:bg-accent dark:focus:bg-neutral-800 focus:text-accent-foreground data-[highlighted]:bg-accent dark:data-[highlighted]:bg-neutral-800 data-[highlighted]:text-accent-foreground data-[disabled]:pointer-events-none data-[disabled]:opacity-50"
+  "relative flex items-center gap-1.5 min-h-[32px] py-[5px] pl-7 pr-1.5 mx-1 rounded-md text-sm cursor-default select-none outline-none transition-colors dark:hover:bg-accent hover:bg-accent hover:text-foreground focus:bg-accent dark:focus:bg-accent focus:text-accent-foreground data-[highlighted]:bg-accent dark:data-[highlighted]:bg-accent data-[highlighted]:text-accent-foreground data-[disabled]:pointer-events-none data-[disabled]:opacity-50"
 
 /** Indicator container (positioned left) */
 export const overlayItemIndicator =

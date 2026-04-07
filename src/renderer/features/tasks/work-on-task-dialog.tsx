@@ -290,7 +290,7 @@ ${truncatedBody}`
               </select>
               {selectedProjectId && chatsList && chatsList.length === 0 && (
                 <p className="text-xs text-muted-foreground">
-                  No workspaces found. Switch to "New workspace" to create one.
+                  No tasks found. Switch to "New task" to create one.
                 </p>
               )}
             </div>
@@ -355,7 +355,7 @@ ${truncatedBody}`
             onClick={handleSubmit}
           >
             {isSubmitting && <Loader2 className="h-3 w-3 animate-spin mr-1.5" />}
-            {workspaceMode === "new" ? "Create Workspace" : "Add to Workspace"}
+            {workspaceMode === "new" ? "Create Task" : "Add to Task"}
           </Button>
         </DialogFooter>
       </DialogContent>

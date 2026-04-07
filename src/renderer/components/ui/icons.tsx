@@ -1402,7 +1402,7 @@ export function IconSpinner(props: IconProps & { color?: string; size?: "default
 export function LoadingDot({
   isLoading,
   className,
-  dotClassName = "bg-[#307BD0]"
+  dotClassName = "bg-primary"
 }: {
   isLoading: boolean
   className?: string

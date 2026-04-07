@@ -309,12 +309,12 @@ export function AgentsPreferencesTab() {
           >
             <SelectTrigger className="w-auto px-2">
               <span className="text-xs">
-                {ctrlTabTarget === "workspaces" ? "Workspaces" : "Agents"}
+                {ctrlTabTarget === "workspaces" ? "Tasks" : "Chats"}
               </span>
             </SelectTrigger>
             <SelectContent>
-              <SelectItem value="workspaces">Workspaces</SelectItem>
-              <SelectItem value="agents">Agents</SelectItem>
+              <SelectItem value="workspaces">Tasks</SelectItem>
+              <SelectItem value="agents">Chats</SelectItem>
             </SelectContent>
           </Select>
         </div>
@@ -324,7 +324,7 @@ export function AgentsPreferencesTab() {
               Auto-advance
             </span>
             <span className="text-xs text-muted-foreground">
-              Where to go after archiving a workspace
+              Where to go after archiving a task
             </span>
           </div>
           <Select
@@ -334,16 +334,16 @@ export function AgentsPreferencesTab() {
             <SelectTrigger className="w-auto px-2">
               <span className="text-xs">
                 {autoAdvanceTarget === "next"
-                  ? "Go to next workspace"
+                  ? "Go to next task"
                   : autoAdvanceTarget === "previous"
-                    ? "Go to previous workspace"
-                    : "Close workspace"}
+                    ? "Go to previous task"
+                    : "Close task"}
               </span>
             </SelectTrigger>
             <SelectContent>
-              <SelectItem value="next">Go to next workspace</SelectItem>
-              <SelectItem value="previous">Go to previous workspace</SelectItem>
-              <SelectItem value="close">Close workspace</SelectItem>
+              <SelectItem value="next">Go to next task</SelectItem>
+              <SelectItem value="previous">Go to previous task</SelectItem>
+              <SelectItem value="close">Close task</SelectItem>
             </SelectContent>
           </Select>
         </div>

@@ -92,7 +92,7 @@ function ThemePreviewBox({
         return color
       }
     }
-    return "#0034FF"
+    return "#73CFA8"
   }
   
   const accentColor = getAccentColor()

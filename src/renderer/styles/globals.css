@@ -9,69 +9,88 @@
 @layer base {
   :root {
     --background: 0 0% 100%;
-    --foreground: 240 10% 3.9%;
+    --foreground: 225 14% 12%;
+    /* #1A1D23 */
     --card: 0 0% 100%;
-    --card-foreground: 240 10% 3.9%;
+    --card-foreground: 225 14% 12%;
     --popover: 0 0% 100%;
-    --popover-foreground: 240 10% 3.9%;
-    --primary: 228 100% 50%;
-    /* #0034FF - same for all themes */
+    --popover-foreground: 225 14% 12%;
+    --primary: 153 46% 55%;
+    /* #4DAE82 - green for light mode */
     --primary-foreground: 0 0% 100%;
-    --secondary: 240 4.8% 95.9%;
-    --secondary-foreground: 240 5.9% 10%;
-    --muted: 240 4.8% 95.9%;
-    --muted-foreground: 240 3.8% 46.1%;
-    --accent: 240 4.8% 95.9%;
-    --accent-foreground: 240 5.9% 10%;
-    --destructive: 0 84.2% 60.2%;
-    --destructive-foreground: 0 0% 98%;
-    --border: 240 5.9% 90%;
-    --input: 240 5.9% 90%;
-    --input-background: 240 4.8% 95.9%;
-    --ring: 228 100% 50%;
-    /* Same as primary - blue focus ring */
-    --selection: 228 100% 50% / 0.25;
-    /* Text selection background - primary at 25% */
+    --secondary: 240 2% 94%;
+    /* #F0F0F2 */
+    --secondary-foreground: 225 14% 12%;
+    --muted: 240 2% 94%;
+    --muted-foreground: 0 0% 53%;
+    /* #888888 */
+    --accent: 44 100% 74%;
+    /* #FFDC79 - warm gold */
+    --accent-foreground: 225 14% 12%;
+    --destructive: 0 73% 51%;
+    --destructive-foreground: 0 0% 100%;
+    --border: 0 0% 83%;
+    /* #D4D4D4 */
+    --input: 0 0% 83%;
+    --input-background: 240 2% 96%;
+    /* #F5F5F7 */
+    --ring: 153 46% 55%;
+    /* Same as primary */
+    --selection: 153 46% 55% / 0.2;
     --radius: 0.5rem;
-    /* Plan Mode Colors */
-    --plan-mode: 33 83% 67%;
+    /* Plan Mode Colors - warm gold */
+    --plan-mode: 44 100% 74%;
     --plan-mode-foreground: 0 0% 8%;
     /* Timeline/Content background */
-    --tl-background: 0 0% 98%;
+    --tl-background: 240 2% 96%;
+
+    /* Font families */
+    --font-display: 'Sora', sans-serif;
+    --font-body: 'Plus Jakarta Sans', sans-serif;
+    --font-mono: 'Geist Mono', 'SF Mono', ui-monospace, monospace;
   }
 
   .dark {
-    --background: 240 10% 3.9%;
-    --foreground: 240 4.8% 95.9%;
-    --card: 240 10% 3.9%;
-    --card-foreground: 0 0% 98%;
-    --popover: 0 0% 9%;
-    /* #171717 */
-    --popover-foreground: 0 0% 98%;
-    --primary: 228 100% 50%;
-    /* #0034FF - same for all themes */
-    --primary-foreground: 0 0% 100%;
-    --secondary: 240 3.7% 15.9%;
-    --secondary-foreground: 0 0% 98%;
-    --muted: 240 5.9% 10%;
-    --muted-foreground: 240 4.4% 58%;
-    --accent: 240 5.9% 10%;
-    --accent-foreground: 0 0% 98%;
-    --destructive: 0 62.8% 30.6%;
-    --destructive-foreground: 0 0% 98%;
-    --border: 240 3.7% 15.9%;
-    --input: 240 3.7% 15.9%;
-    /* #30302E - matches Claude input color */
-    --input-background: 60 2% 18%;
-    --ring: 228 100% 50%;
-    /* Same as primary - blue focus ring */
-    --selection: 228 100% 50% / 0.3;
-    /* Text selection background - primary at 30% */
-    /* Plan Mode Colors */
-    --plan-mode: 33 83% 67%;
-    --plan-mode-foreground: 0 0% 8%;
-    /* Timeline/Content background - matches Claude input color #30302E */
-    --tl-background: 60 2% 18%;
+    --background: 225 14% 12%;
+    /* #1A1D23 - warm blue-gray */
+    --foreground: 0 0% 90%;
+    /* #E5E5E5 */
+    --card: 225 14% 12%;
+    --card-foreground: 0 0% 90%;
+    --popover: 195 5% 20%;
+    /* #2F3436 - surface */
+    --popover-foreground: 0 0% 90%;
+    --primary: 153 46% 63%;
+    /* #73CFA8 - minty green */
+    --primary-foreground: 0 0% 4%;
+    /* dark text on green */
+    --secondary: 195 5% 20%;
+    /* #2F3436 */
+    --secondary-foreground: 0 0% 90%;
+    --muted: 220 10% 10%;
+    /* #14161B */
+    --muted-foreground: 0 0% 40%;
+    /* #666666 */
+    --accent: 44 100% 74%;
+    /* #FFDC79 - warm gold */
+    --accent-foreground: 0 0% 4%;
+    --destructive: 0 100% 71%;
+    /* #FF6B6B */
+    --destructive-foreground: 0 0% 100%;
+    --border: 0 0% 20%;
+    /* #333333 */
+    --input: 0 0% 20%;
+    --input-background: 220 10% 10%;
+    /* #14161B */
+    --ring: 153 46% 63%;
+    /* Same as primary */
+    --selection: 153 46% 63% / 0.25;
+    /* Plan Mode Colors - warm gold */
+    --plan-mode: 44 100% 74%;
+    --plan-mode-foreground: 0 0% 4%;
+    /* Timeline/Content background */
+    --tl-background: 220 10% 10%;
+    /* #14161B */
   }
 }
 
@@ -81,6 +100,7 @@
   }
   body {
     @apply bg-background text-foreground;
+    font-family: var(--font-body);
     font-feature-settings:
       "rlig" 1,
       "calt" 1;
