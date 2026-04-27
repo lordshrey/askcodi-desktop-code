@@ -7,6 +7,14 @@ import path from "path"
 import { z } from "zod"
 import { setConnectionMethod } from "../../analytics"
 import {
+  evaluatePlanModeBlock,
+  normalizeOllamaToolInput,
+} from "./claude-can-use-tool-helpers"
+import {
+  buildSwarmExploreAgent,
+  mergeWithPluginAgents,
+} from "../../swarm/subagent-registry"
+import {
   buildClaudeEnv,
   checkOfflineFallback,
   createTransformer,
@@ -1644,9 +1652,24 @@ ${prompt}
                 abortController, // Must be inside options!
                 cwd: input.cwd,
                 systemPrompt: systemPromptConfig,
-                // Register agents: plugin agents override @mention agents
+                // Register agents: plugin agents override @mention agents.
+                // Swarm subagent (swarm_explore) is added when the env flag is
+                // on; user-defined plugin agents with the same key win.
                 ...(!isUsingOllama && {
-                  agents: pluginAgents ?? (Object.keys(agentsOption).length > 0 ? agentsOption : undefined),
+                  agents: (() => {
+                    const baseAgents =
+                      pluginAgents ??
+                      (Object.keys(agentsOption).length > 0
+                        ? agentsOption
+                        : undefined)
+                    const swarmEnabled =
+                      (import.meta.env.MAIN_VITE_SWARM_ENABLED ?? "") === "true"
+                    if (!swarmEnabled) return baseAgents
+                    // v0.1: cold-start prompt (no fingerprint). Fingerprint
+                    // injection lands when the gateway endpoints ship.
+                    const swarmAgent = buildSwarmExploreAgent(null)
+                    return mergeWithPluginAgents(swarmAgent, baseAgents)
+                  })(),
                 }),
                 // MCP servers: plugin MCP overrides merged MCP
                 ...((mcpServersFiltered || pluginAgents) &&
@@ -1671,110 +1694,15 @@ ${prompt}
                   toolInput: Record<string, unknown>,
                   options: { toolUseID: string },
                 ) => {
-                  // Fix common parameter mistakes from Ollama models
-                  // Local models often use slightly wrong parameter names
-                  if (isUsingOllama) {
-                    // Read: "file" -> "file_path"
-                    if (
-                      toolName === "Read" &&
-                      toolInput.file &&
-                      !toolInput.file_path
-                    ) {
-                      toolInput.file_path = toolInput.file
-                      delete toolInput.file
-                      console.log("[Ollama] Fixed Read tool: file -> file_path")
-                    }
-                    // Write: "file" -> "file_path", "content" is usually correct
-                    if (
-                      toolName === "Write" &&
-                      toolInput.file &&
-                      !toolInput.file_path
-                    ) {
-                      toolInput.file_path = toolInput.file
-                      delete toolInput.file
-                      console.log(
-                        "[Ollama] Fixed Write tool: file -> file_path",
-                      )
-                    }
-                    // Edit: "file" -> "file_path"
-                    if (
-                      toolName === "Edit" &&
-                      toolInput.file &&
-                      !toolInput.file_path
-                    ) {
-                      toolInput.file_path = toolInput.file
-                      delete toolInput.file
-                      console.log("[Ollama] Fixed Edit tool: file -> file_path")
-                    }
-                    // Glob: "path" might be passed as "directory" or "dir"
-                    if (toolName === "Glob") {
-                      if (toolInput.directory && !toolInput.path) {
-                        toolInput.path = toolInput.directory
-                        delete toolInput.directory
-                        console.log(
-                          "[Ollama] Fixed Glob tool: directory -> path",
-                        )
-                      }
-                      if (toolInput.dir && !toolInput.path) {
-                        toolInput.path = toolInput.dir
-                        delete toolInput.dir
-                        console.log("[Ollama] Fixed Glob tool: dir -> path")
-                      }
-                    }
-                    // Grep: "query" -> "pattern", "directory" -> "path"
-                    if (toolName === "Grep") {
-                      if (toolInput.query && !toolInput.pattern) {
-                        toolInput.pattern = toolInput.query
-                        delete toolInput.query
-                        console.log(
-                          "[Ollama] Fixed Grep tool: query -> pattern",
-                        )
-                      }
-                      if (toolInput.directory && !toolInput.path) {
-                        toolInput.path = toolInput.directory
-                        delete toolInput.directory
-                        console.log(
-                          "[Ollama] Fixed Grep tool: directory -> path",
-                        )
-                      }
-                    }
-                    // Bash: "cmd" -> "command"
-                    if (
-                      toolName === "Bash" &&
-                      toolInput.cmd &&
-                      !toolInput.command
-                    ) {
-                      toolInput.command = toolInput.cmd
-                      delete toolInput.cmd
-                      console.log("[Ollama] Fixed Bash tool: cmd -> command")
-                    }
-                  }
+                  normalizeOllamaToolInput(toolName, toolInput, isUsingOllama)
 
-                  if (input.mode === "plan") {
-                    if (toolName === "Edit" || toolName === "Write") {
-                      const filePath =
-                        typeof toolInput.file_path === "string"
-                          ? toolInput.file_path
-                          : ""
-                      if (!/\.md$/i.test(filePath)) {
-                        return {
-                          behavior: "deny",
-                          message:
-                            'Only ".md" files can be modified in plan mode.',
-                        }
-                      }
-                    } else if (toolName == "ExitPlanMode") {
-                      return {
-                        behavior: "deny",
-                        message: `IMPORTANT: DONT IMPLEMENT THE PLAN UNTIL THE EXPLIT COMMAND. THE PLAN WAS **ONLY** PRESENTED TO USER, FINISH CURRENT MESSAGE AS SOON AS POSSIBLE`,
-                      }
-                    } else if (PLAN_MODE_BLOCKED_TOOLS.has(toolName)) {
-                      return {
-                        behavior: "deny",
-                        message: `Tool "${toolName}" blocked in plan mode.`,
-                      }
-                    }
-                  }
+                  const planBlock = evaluatePlanModeBlock(
+                    input.mode,
+                    toolName,
+                    toolInput,
+                    PLAN_MODE_BLOCKED_TOOLS,
+                  )
+                  if (planBlock) return planBlock
                   if (toolName === "AskUserQuestion") {
                     const { toolUseID } = options
                     // Emit to UI (safely in case observer is closed)

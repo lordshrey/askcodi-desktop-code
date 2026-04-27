@@ -32,6 +32,7 @@
     "db:push": "drizzle-kit push",
     "db:studio": "drizzle-kit studio",
     "test": "vitest run",
+    "test:swarm": "bun run scripts/test-swarm.ts",
     "ts:check": "tsgo --noEmit",
     "postinstall": "node -e \"if(!process.env.VERCEL){const sdk=require('child_process').execSync('xcrun --show-sdk-path').toString().trim();require('child_process').execSync('electron-rebuild -f -w better-sqlite3,node-pty',{stdio:'inherit',env:{...process.env,CXXFLAGS:'-isystem '+sdk+'/usr/include/c++/v1',CFLAGS:'-isystem '+sdk+'/usr/include'}})}\" && node scripts/patch-electron-dev.mjs"
   },

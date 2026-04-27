@@ -31,3 +31,6 @@ electron.vite.config.*.mjs
 # Claude binary (downloaded at build time)
 resources/bin/
 .gstack/
+
+# Swarm iteration harness output
+test-runs/
