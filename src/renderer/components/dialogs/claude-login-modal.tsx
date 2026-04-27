@@ -69,7 +69,18 @@ export function ClaudeLoginModal({
   const startAuthMutation = trpc.claudeCode.startAuth.useMutation()
   const submitCodeMutation = trpc.claudeCode.submitCode.useMutation()
   const openOAuthUrlMutation = trpc.claudeCode.openOAuthUrl.useMutation()
+  const importSystemTokenMutation =
+    trpc.claudeCode.importSystemToken.useMutation()
   const trpcUtils = trpc.useUtils()
+
+  // Detect a token from the local Claude Code CLI keychain. When present,
+  // the user can skip the (currently broken) askcodi.com OAuth sandbox flow
+  // and use that token directly.
+  const systemTokenQuery = trpc.claudeCode.getSystemToken.useQuery(undefined, {
+    enabled: open,
+  })
+  const hasSystemToken = !!systemTokenQuery.data?.token
+  const [importingSystem, setImportingSystem] = useState(false)
 
   // Poll for OAuth URL
   const pollStatusQuery = trpc.claudeCode.pollStatus.useQuery(
@@ -302,6 +313,27 @@ export function ClaudeLoginModal({
     setOpen(false)
   }
 
+  const handleImportSystemToken = useCallback(async () => {
+    setImportingSystem(true)
+    try {
+      await importSystemTokenMutation.mutateAsync()
+      handleAuthSuccess()
+    } catch (err) {
+      setFlowState({
+        step: "error",
+        message:
+          err instanceof Error
+            ? err.message
+            : "Failed to import system token",
+      })
+    } finally {
+      setImportingSystem(false)
+    }
+    // handleAuthSuccess closes the modal and invalidates queries; safe to
+    // depend on the mutation reference only.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [importSystemTokenMutation])
+
   const isLoadingAuth =
     flowState.step === "starting" || flowState.step === "waiting_url"
   const isSubmitting = flowState.step === "submitting"
@@ -348,17 +380,33 @@ export function ClaudeLoginModal({
           <div className="space-y-6">
             {/* Connect Button - shows loader only if user clicked AND loading */}
             {!urlOpened && flowState.step !== "has_url" && flowState.step !== "error" && (
-              <Button
-                onClick={handleConnectClick}
-                className="w-full"
-                disabled={userClickedConnect && isLoadingAuth}
-              >
-                {userClickedConnect && isLoadingAuth ? (
-                  <IconSpinner className="h-4 w-4" />
-                ) : (
-                  "Connect"
+              <div className="space-y-2">
+                <Button
+                  onClick={handleConnectClick}
+                  className="w-full"
+                  disabled={userClickedConnect && isLoadingAuth}
+                >
+                  {userClickedConnect && isLoadingAuth ? (
+                    <IconSpinner className="h-4 w-4" />
+                  ) : (
+                    "Connect"
+                  )}
+                </Button>
+                {hasSystemToken && (
+                  <Button
+                    variant="secondary"
+                    onClick={handleImportSystemToken}
+                    className="w-full"
+                    disabled={importingSystem}
+                  >
+                    {importingSystem ? (
+                      <IconSpinner className="h-4 w-4" />
+                    ) : (
+                      "Use existing Claude CLI token"
+                    )}
+                  </Button>
                 )}
-              </Button>
+              </div>
             )}
 
             {/* Code Input - Show after URL is opened or if has_url */}
@@ -405,13 +453,28 @@ export function ClaudeLoginModal({
                 <div className="p-4 bg-destructive/10 border border-destructive/20 rounded-lg">
                   <p className="text-sm text-destructive">{flowState.message}</p>
                 </div>
-                <Button
-                  variant="secondary"
-                  onClick={handleConnectClick}
-                  className="w-full"
-                >
-                  Try Again
-                </Button>
+                <div className="space-y-2">
+                  <Button
+                    variant="secondary"
+                    onClick={handleConnectClick}
+                    className="w-full"
+                  >
+                    Try Again
+                  </Button>
+                  {hasSystemToken && (
+                    <Button
+                      onClick={handleImportSystemToken}
+                      className="w-full"
+                      disabled={importingSystem}
+                    >
+                      {importingSystem ? (
+                        <IconSpinner className="h-4 w-4" />
+                      ) : (
+                        "Use existing Claude CLI token"
+                      )}
+                    </Button>
+                  )}
+                </div>
               </div>
             )}
 

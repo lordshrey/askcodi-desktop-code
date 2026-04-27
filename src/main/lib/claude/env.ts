@@ -9,6 +9,7 @@ import {
   isWindows,
   platform
 } from "../platform"
+import { findSystemClaude } from "./find-binary"
 
 // Cache the shell environment
 let cachedShellEnv: Record<string, string> | null = null
@@ -38,8 +39,14 @@ let cachedBinaryPath: string | null = null
 let binaryPathComputed = false
 
 /**
- * Get path to the bundled Claude binary.
- * Returns the path to the native Claude executable bundled with the app.
+ * Get the path to the Claude native binary.
+ *
+ * Resolution order:
+ *   1. Bundled binary at `resources/bin/{platform}-{arch}/claude`
+ *      (populated by `bun run claude:download`; required for packaged builds).
+ *   2. In dev only: a system-installed `claude` on disk. Lets contributors
+ *      run the app without first downloading the ~50MB bundled copy.
+ *
  * CACHED - only computes path once and logs verbose info on first call.
  */
 export function getBundledClaudeBinaryPath(): string {
@@ -79,25 +86,52 @@ export function getBundledClaudeBinaryPath(): string {
   // Check if binary exists
   const exists = fs.existsSync(binaryPath)
 
-  if (!exists) {
-    console.error(
-      "[claude-binary] WARNING: Binary not found at path:",
-      binaryPath
-    )
-    console.error(
-      "[claude-binary] Run 'bun run claude:download' to download it"
-    )
-  } else {
+  if (exists) {
     const stats = fs.statSync(binaryPath)
     const sizeMB = (stats.size / 1024 / 1024).toFixed(1)
     const isExecutable = (stats.mode & fs.constants.X_OK) !== 0
     console.log("[claude-binary] exists:", exists)
     console.log("[claude-binary] size:", sizeMB, "MB")
     console.log("[claude-binary] isExecutable:", isExecutable)
+    console.log("[claude-binary] ============================================")
+    cachedBinaryPath = binaryPath
+    binaryPathComputed = true
+    return binaryPath
+  }
+
+  console.warn(
+    "[claude-binary] Bundled binary not found at:",
+    binaryPath
+  )
+
+  if (isDev) {
+    const systemClaude = findSystemClaude()
+    if (systemClaude) {
+      console.log(
+        "[claude-binary] Falling back to system-installed claude at:",
+        systemClaude
+      )
+      console.log("[claude-binary] (run 'bun run claude:download' to bundle)")
+      console.log(
+        "[claude-binary] ============================================"
+      )
+      cachedBinaryPath = systemClaude
+      binaryPathComputed = true
+      return systemClaude
+    }
+    console.error(
+      "[claude-binary] No system claude found either. Install via",
+      "https://claude.ai/install or run 'bun run claude:download'."
+    )
+  } else {
+    console.error(
+      "[claude-binary] Run 'bun run claude:download' to download it"
+    )
   }
   console.log("[claude-binary] ============================================")
 
-  // Cache the result
+  // Cache the (likely-failing) bundled path so the SDK surfaces a clean
+  // error message rather than us throwing here.
   cachedBinaryPath = binaryPath
   binaryPathComputed = true
 
