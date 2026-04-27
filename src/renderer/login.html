@@ -254,14 +254,23 @@
         }
       });
 
-      // Sign in via OAuth
-      loginBtn.addEventListener('click', function() {
+      // Sign in via askcodi.com OAuth
+      loginBtn.addEventListener('click', async function() {
         console.log('Sign in clicked');
         hideError();
-        if (window.desktopApi && window.desktopApi.startAuthFlow) {
-          window.desktopApi.startAuthFlow();
-        } else {
+        if (!window.desktopApi || !window.desktopApi.startAuthFlow) {
           showError('Desktop API not available. Please restart the app.');
+          return;
+        }
+        try {
+          var result = await window.desktopApi.startAuthFlow();
+          if (result && result.ok === false) {
+            showError(result.error || 'Could not open the browser. Try the API key option below.');
+          }
+          // On success, the browser opens. The deep link returns to handleAuthCode()
+          // which reloads this window into the main app.
+        } catch (err) {
+          showError(err.message || 'Failed to start sign-in');
         }
       });
 

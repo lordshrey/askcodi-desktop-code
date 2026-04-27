@@ -378,9 +378,18 @@ function registerIpcHandlers(): void {
   })
 
   ipcMain.handle("auth:start-flow", (event) => {
-    if (!validateSender(event)) return
+    if (!validateSender(event)) return { ok: false, error: "Invalid sender" }
     const win = getWindowFromEvent(event)
-    getAuthManager().startAuthFlow(win)
+    try {
+      getAuthManager().startAuthFlow(win)
+      return { ok: true }
+    } catch (error) {
+      console.error("[IPC] auth:start-flow error:", error)
+      return {
+        ok: false,
+        error: error instanceof Error ? error.message : String(error),
+      }
+    }
   })
 
   ipcMain.handle("auth:submit-code", async (event, code: string) => {
@@ -814,13 +823,19 @@ export function createWindow(options?: { chatId?: string; subChatId?: string }):
     // windowManager handles cleanup via 'closed' event listener
   })
 
-  // Load the renderer — require AskCodi auth
+  // Load the renderer — accept EITHER auth path:
+  //  - AskCodi API key (legacy, AskCodiAuthManager / askcodi-auth.dat)
+  //  - askcodi.com OAuth (new, AuthManager / auth.dat)
+  // Reconciling these two managers into one is a planned follow-up.
   const devServerUrl = process.env.ELECTRON_RENDERER_URL
   const askCodiAuth = getAskCodiAuthManager()
-  const isAskCodiAuth = askCodiAuth?.isAuthenticated() ?? false
+  const generalAuth = getAuthManager()
+  const isAuthed =
+    (askCodiAuth?.isAuthenticated() ?? false) ||
+    (generalAuth?.isAuthenticated() ?? false)
 
-  if (!isAskCodiAuth) {
-    console.log("[Main] AskCodi not authenticated, showing login page")
+  if (!isAuthed) {
+    console.log("[Main] No auth (neither OAuth nor API key), showing login page")
     showLoginPageInWindow(window)
     return window
   }

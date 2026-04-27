@@ -933,3 +933,26 @@ export const mcpApprovalDialogOpenAtom = atom<boolean>(false)
 
 // Pending MCP approvals to show in the dialog
 export const pendingMcpApprovalsAtom = atom<PendingMcpApproval[]>([])
+
+// ============================================
+// ONBOARDING WIZARD V2 ATOMS
+// ============================================
+
+// Current step in the 3-step wizard (GitHub, Agents, Repo).
+// Persisted so a mid-flow reload lands the user on the right step.
+export type OnboardingStep = 0 | 1 | 2
+export const onboardingCurrentStepAtom = atomWithStorage<OnboardingStep>(
+  "onboarding-v2:step",
+  0,
+  undefined,
+  { getOnInit: true },
+)
+
+// Single completion flag for the new wizard. Existing users with any
+// legacy completion atom set are auto-migrated to true on first mount.
+export const onboardingCompletedAtom = atomWithStorage<boolean>(
+  "onboarding-v2:completed",
+  false,
+  undefined,
+  { getOnInit: true },
+)

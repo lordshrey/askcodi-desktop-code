@@ -7,13 +7,57 @@ import { basename, join } from "path"
 import { exec } from "node:child_process"
 import { promisify } from "node:util"
 import { existsSync } from "node:fs"
-import { mkdir, copyFile, unlink } from "node:fs/promises"
+import { mkdir, copyFile, unlink, writeFile, rm } from "node:fs/promises"
 import { extname } from "node:path"
+import simpleGit from "simple-git"
 import { getGitRemoteInfo } from "../../git"
 import { trackProjectOpened } from "../../analytics"
 import { getLaunchDirectory } from "../../cli"
 
 const execAsync = promisify(exec)
+
+/**
+ * Scaffold a brand new local git repo: mkdir + `git init` + write a starter
+ * README. Does NOT commit (avoids `user.email not set` on clean machines).
+ * Exported for testability — the tRPC mutation wraps this with DB insertion.
+ *
+ * Throws if the target dir already exists. Cleans up the created dir on any
+ * failure after mkdir so we don't leave half-initialised state.
+ */
+export async function scaffoldQuickStartDir(
+  parentDir: string,
+  name: string,
+): Promise<string> {
+  const targetDir = join(parentDir, name)
+
+  if (existsSync(targetDir)) {
+    throw new Error(
+      `A folder named "${name}" already exists in that location`,
+    )
+  }
+
+  let createdDir = false
+  try {
+    await mkdir(targetDir, { recursive: true })
+    createdDir = true
+
+    const git = simpleGit(targetDir)
+    await git.init()
+
+    await writeFile(
+      join(targetDir, "README.md"),
+      `# ${name}\n\nCreated by AskCodi.\n`,
+      "utf-8",
+    )
+
+    return targetDir
+  } catch (error) {
+    if (createdDir) {
+      await rm(targetDir, { recursive: true, force: true }).catch(() => {})
+    }
+    throw error
+  }
+}
 
 export const projectsRouter = router({
   /**
@@ -168,6 +212,89 @@ export const projectsRouter = router({
         })
         .returning()
         .get()
+    }),
+
+  /**
+   * Open the native folder picker and return the selected path without
+   * touching the projects table. Used by the onboarding wizard's "Quick
+   * start" tile to let the user pick a parent directory.
+   */
+  pickDirectory: publicProcedure
+    .input(
+      z
+        .object({
+          title: z.string().optional(),
+          buttonLabel: z.string().optional(),
+        })
+        .optional(),
+    )
+    .mutation(async ({ input, ctx }) => {
+      const window = ctx.getWindow?.() ?? BrowserWindow.getFocusedWindow()
+      if (!window) return null
+
+      if (!window.isFocused()) {
+        window.focus()
+        await new Promise((resolve) => setTimeout(resolve, 100))
+      }
+
+      const result = await dialog.showOpenDialog(window, {
+        properties: ["openDirectory", "createDirectory"],
+        title: input?.title ?? "Select Folder",
+        buttonLabel: input?.buttonLabel ?? "Select",
+      })
+
+      if (result.canceled || result.filePaths.length === 0) return null
+      return { path: result.filePaths[0] }
+    }),
+
+  /**
+   * Quick start: scaffold a brand new local repo (mkdir + git init + README)
+   * and register it as a project. Used by the onboarding wizard's "Create a
+   * new repo for me" tile.
+   *
+   * Intentionally does NOT make a first commit — that requires git user.email
+   * and user.name which may not be set on a fresh machine. The README is left
+   * as an unstaged file for the user to commit themselves.
+   */
+  quickStart: publicProcedure
+    .input(
+      z.object({
+        parentDir: z.string().min(1),
+        name: z
+          .string()
+          .min(1)
+          .max(100)
+          .regex(
+            /^[a-zA-Z0-9._-]+$/,
+            "Use letters, numbers, dot, dash, underscore",
+          ),
+      }),
+    )
+    .mutation(async ({ input }) => {
+      const targetDir = await scaffoldQuickStartDir(input.parentDir, input.name)
+
+      const db = getDatabase()
+      const gitInfo = await getGitRemoteInfo(targetDir)
+
+      const newProject = db
+        .insert(projects)
+        .values({
+          name: input.name,
+          path: targetDir,
+          gitRemoteUrl: gitInfo.remoteUrl,
+          gitProvider: gitInfo.provider,
+          gitOwner: gitInfo.owner,
+          gitRepo: gitInfo.repo,
+        })
+        .returning()
+        .get()
+
+      trackProjectOpened({
+        id: newProject!.id,
+        hasGitRemote: !!gitInfo.remoteUrl,
+      })
+
+      return newProject
     }),
 
   /**

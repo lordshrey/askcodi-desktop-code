@@ -3,8 +3,9 @@ import { app, BrowserWindow } from "electron"
 import { AUTH_SERVER_PORT } from "./constants"
 
 // =============================================================================
-// ARCHIVED: OAuth flow — disabled but kept for future reference.
-// All public methods return safe no-op values so callers don't crash.
+// askcodi.com OAuth flow for AskCodi Desktop.
+// Server-side endpoints live in askcodi-api-app/src/pages/api/auth/desktop/*.
+// Tokens are stored encrypted via safeStorage in AuthStore.
 // =============================================================================
 
 // Get API URL - in packaged app always use production, in dev allow override
@@ -25,7 +26,8 @@ export class AuthManager {
     this.store = new AuthStore(app.getPath("userData"))
     this.isDev = isDev
 
-    // ARCHIVED: Skip token refresh scheduling
+    // Schedule a refresh on startup if we already have a stored session
+    this.scheduleRefresh()
   }
 
   /**
@@ -85,11 +87,24 @@ export class AuthManager {
   }
 
   /**
-   * Get a valid token, refreshing if necessary
-   * ARCHIVED: Always returns null — OAuth disabled
+   * Get a valid token, refreshing if necessary.
+   * Returns null if not authenticated or refresh fails.
    */
   async getValidToken(): Promise<string | null> {
-    return null
+    const data = this.store.load()
+    if (!data) return null
+
+    const expiresAt = new Date(data.expiresAt).getTime()
+    const now = Date.now()
+
+    // Refresh proactively if expiring within 5 minutes
+    if (expiresAt - now < 5 * 60 * 1000) {
+      const ok = await this.refresh()
+      if (!ok) return null
+      return this.store.load()?.token ?? null
+    }
+
+    return data.token
   }
 
   /**
@@ -167,11 +182,13 @@ export class AuthManager {
   }
 
   /**
-   * Check if user is authenticated
-   * ARCHIVED: Always returns false — OAuth disabled
+   * Check if the user has a non-expired session stored locally.
+   * Does NOT trigger a refresh — call getValidToken() for that.
    */
   isAuthenticated(): boolean {
-    return false
+    const data = this.store.load()
+    if (!data) return false
+    return new Date(data.expiresAt).getTime() > Date.now()
   }
 
   /**
