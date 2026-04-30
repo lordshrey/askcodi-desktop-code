@@ -15,7 +15,6 @@ import { readFileSync, existsSync, writeFileSync, mkdirSync } from "fs"
 import { createIPCHandler } from "trpc-electron/main"
 import { createAppRouter } from "../lib/trpc/routers"
 import { getAuthManager, handleAuthCode, getBaseUrl } from "../index"
-import { getAskCodiAuthManager, initAskCodiAuthManager } from "../askcodi-auth-manager"
 import { registerGitWatcherIPC } from "../lib/git/watcher"
 import { hasActiveClaudeSessions, abortAllClaudeSessions } from "../lib/trpc/routers/claude"
 import { hasActiveCodexStreams, abortAllCodexStreams } from "../lib/trpc/routers/codex"
@@ -359,10 +358,7 @@ function registerIpcHandlers(): void {
 
   ipcMain.handle("auth:logout", async (event) => {
     if (!validateSender(event)) return
-    getAuthManager().logout()
-    // Also clear AskCodi auth
-    const askCodiAuth = getAskCodiAuthManager()
-    askCodiAuth?.logout()
+    await getAuthManager().logout()
     // Clear cookie from persist:main partition
     const ses = session.fromPartition("persist:main")
     try {
@@ -419,20 +415,8 @@ function registerIpcHandlers(): void {
     return getAuthManager().getValidToken()
   })
 
-  // AskCodi API key validation from login page
-  ipcMain.handle("askcodi:validate-api-key", async (event, apiKey: string) => {
-    if (!validateSender(event)) return { success: false, error: "Invalid sender" }
-    if (!apiKey || typeof apiKey !== "string") {
-      return { success: false, error: "Invalid API key" }
-    }
-    const authManager = getAskCodiAuthManager() || initAskCodiAuthManager()
-    const result = await authManager.setApiKey(apiKey.trim())
-    console.log("[IPC] askcodi:validate-api-key result:", result.success ? "success" : result.error)
-    return result
-  })
-
-  // AskCodi auth success - reload window to main app
-  ipcMain.handle("askcodi:auth-complete", (event) => {
+  // Reload window into the main app after a successful OAuth exchange.
+  ipcMain.handle("auth:auth-complete", (event) => {
     if (!validateSender(event)) return
     const win = getWindowFromEvent(event)
     if (!win) return
@@ -823,19 +807,14 @@ export function createWindow(options?: { chatId?: string; subChatId?: string }):
     // windowManager handles cleanup via 'closed' event listener
   })
 
-  // Load the renderer — accept EITHER auth path:
-  //  - AskCodi API key (legacy, AskCodiAuthManager / askcodi-auth.dat)
-  //  - askcodi.com OAuth (new, AuthManager / auth.dat)
-  // Reconciling these two managers into one is a planned follow-up.
+  // Boot gate: askcodi.com OAuth is the single source of truth. The one-shot
+  // legacy migration that deletes any old askcodi-auth.dat runs once at app
+  // boot in src/main/index.ts; nothing to do per-window here.
   const devServerUrl = process.env.ELECTRON_RENDERER_URL
-  const askCodiAuth = getAskCodiAuthManager()
-  const generalAuth = getAuthManager()
-  const isAuthed =
-    (askCodiAuth?.isAuthenticated() ?? false) ||
-    (generalAuth?.isAuthenticated() ?? false)
+  const isAuthed = getAuthManager()?.isAuthenticated() ?? false
 
   if (!isAuthed) {
-    console.log("[Main] No auth (neither OAuth nor API key), showing login page")
+    console.log("[Main] Not authenticated, showing login page")
     showLoginPageInWindow(window)
     return window
   }

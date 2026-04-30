@@ -68,6 +68,7 @@ export class AuthManager {
       refreshToken: data.refreshToken,
       expiresAt: data.expiresAt,
       user: data.user,
+      gatewayApiKey: data.gatewayApiKey ?? null,
     }
 
     this.store.save(authData)
@@ -126,20 +127,26 @@ export class AuthManager {
 
       if (!response.ok) {
         console.error("Refresh failed:", response.status)
-        // If refresh fails, clear auth and require re-login
+        // If refresh fails with 401, the session is already dead server-side
+        // — no point hitting /logout. Just clear local state synchronously so
+        // the boot gate flips immediately.
         if (response.status === 401) {
-          this.logout()
+          this.clearLocal()
         }
         return false
       }
 
       const data = await response.json()
 
+      // Carry the existing gatewayApiKey forward — the server's refresh.js
+      // never returns one, and re-issuing on refresh would invalidate active
+      // gateway calls. See test: "refresh preserves the stored gatewayApiKey".
       const authData: AuthData = {
         token: data.token,
         refreshToken: data.refreshToken,
         expiresAt: data.expiresAt,
         user: data.user,
+        gatewayApiKey: this.store.getGatewayApiKey(),
       }
 
       this.store.save(authData)
@@ -206,14 +213,52 @@ export class AuthManager {
   }
 
   /**
-   * Logout and clear stored credentials
+   * Clear in-memory + on-disk auth state without contacting the server.
+   * Used by the refresh-401 fast path where the server already considers
+   * the session dead.
    */
-  logout(): void {
+  private clearLocal(): void {
     if (this.refreshTimer) {
       clearTimeout(this.refreshTimer)
       this.refreshTimer = undefined
     }
     this.store.clear()
+  }
+
+  /**
+   * Logout and clear stored credentials. Also revokes the refresh session and
+   * the ak- gateway key on the server (best-effort — local state is always
+   * cleared even if the network call fails).
+   */
+  async logout(): Promise<void> {
+    const refreshToken = this.store.getRefreshToken()
+    const gatewayApiKey = this.store.getGatewayApiKey()
+
+    // Clear local state up front so the rest of the app sees logout instantly.
+    // The server revocation is best-effort — if the network is down, we'd
+    // rather not block the user from logging out.
+    this.clearLocal()
+
+    if (refreshToken) {
+      try {
+        await fetch(`${this.getApiUrl()}/api/auth/desktop/logout`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ refreshToken, gatewayApiKey }),
+        })
+      } catch (error) {
+        console.warn("[AuthManager] Server logout failed (local state already cleared):", error)
+      }
+    }
+  }
+
+  /**
+   * Get the AskCodi gateway ak- key for use by the AskCodi-as-provider router.
+   * Returns null if no key was issued (older auth.dat) — the caller should
+   * trigger a re-OAuth in that case.
+   */
+  getGatewayApiKey(): string | null {
+    return this.store.getGatewayApiKey()
   }
 
   /**

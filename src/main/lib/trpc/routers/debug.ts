@@ -93,9 +93,9 @@ export const debugRouter = router({
   /**
    * Logout (clear auth only)
    */
-  logout: publicProcedure.mutation(() => {
+  logout: publicProcedure.mutation(async () => {
     const authManager = getAuthManager()
-    authManager.logout()
+    await authManager.logout()
     console.log("[Debug] User logged out")
     return { success: true }
   }),

@@ -3,15 +3,16 @@ import { observable } from "@trpc/server/observable"
 import { streamText, stepCountIs, type UIMessage } from "ai"
 import { eq } from "drizzle-orm"
 import { z } from "zod"
-import {
-  getAskCodiAuthManager,
-  initAskCodiAuthManager,
-} from "../../../askcodi-auth-manager"
+import { getAuthManager } from "../../../auth-manager"
 import { createAskCodiTools } from "../../askcodi/tools"
+import { getApiUrl } from "../../config"
 import { getDatabase, subChats } from "../../db"
 import { publicProcedure, router } from "../index"
 
-const ASKCODI_API_BASE = "http://127.0.0.1:8001/v1"
+// AskCodi gateway lives on the same host as the web app (askcodi.com in prod,
+// optionally overridden in dev via MAIN_VITE_API_URL). Mounted under
+// /api/gateway/v1 to match the OpenAI-compatible URL shape the AI SDK expects.
+const ASKCODI_API_BASE = `${getApiUrl()}/api/gateway/v1`
 
 const imageAttachmentSchema = z.object({
   base64Data: z.string(),
@@ -142,18 +143,20 @@ export const askcodiRouter = router({
             console.log(`[askcodi] cwd: ${input.cwd}`)
             console.log(`[askcodi] API base: ${ASKCODI_API_BASE}`)
 
-            // Get credential
-            const authManager = getAskCodiAuthManager()
+            // The gateway key is issued at OAuth-exchange time and stored in
+            // the same AuthData blob as the JWT/refresh token. Callers may
+            // override per-request (e.g., for a settings-page test call).
             const apiKey =
               input.apiKey ||
-              authManager?.getValidCredential()
+              getAuthManager()?.getGatewayApiKey() ||
+              null
 
             console.log(`[askcodi] API key: ${apiKey ? `${apiKey.slice(0, 8)}...` : "MISSING"}`)
 
             if (!apiKey) {
               safeEmit({
                 type: "auth-error",
-                errorText: "AskCodi API key not configured",
+                errorText: "AskCodi gateway key missing — please sign out and sign back in.",
               })
               safeEmit({ type: "finish" })
               safeComplete()
@@ -436,13 +439,21 @@ export const askcodiRouter = router({
       return cachedModels
     }
 
-    const authManager = getAskCodiAuthManager()
-    if (!authManager) {
+    const apiKey = getAuthManager()?.getGatewayApiKey()
+    if (!apiKey) {
       return []
     }
 
     try {
-      const models = await authManager.fetchModels()
+      const response = await fetch(`${ASKCODI_API_BASE}/models`, {
+        headers: { Authorization: `Bearer ${apiKey}` },
+      })
+      if (!response.ok) {
+        console.error(`[askcodi] models fetch failed: ${response.status}`)
+        return cachedModels || []
+      }
+      const data = await response.json()
+      const models = (data.data || []).map((m: any) => ({ id: m.id, name: m.id }))
       cachedModels = models
       modelsCachedAt = Date.now()
       return models
@@ -452,32 +463,42 @@ export const askcodiRouter = router({
     }
   }),
 
+  // Validate a candidate API key against the gateway. Used by the settings
+  // override flow only (not the onboarding wizard — onboarding gets its key
+  // automatically from OAuth exchange). Does NOT mutate AuthManager state.
   validateApiKey: publicProcedure
     .input(z.object({ apiKey: z.string() }))
     .mutation(async ({ input }) => {
-      const authManager = getAskCodiAuthManager() || initAskCodiAuthManager()
-      return authManager.setApiKey(input.apiKey)
+      try {
+        const response = await fetch(`${ASKCODI_API_BASE}/models`, {
+          headers: { Authorization: `Bearer ${input.apiKey}` },
+        })
+        if (response.ok) return { success: true }
+        if (response.status === 401 || response.status === 403) {
+          return { success: false, error: "Invalid API key" }
+        }
+        return { success: false, error: `Validation failed: ${response.status}` }
+      } catch (error) {
+        const err = error as Error
+        return { success: false, error: `Connection failed: ${err.message}` }
+      }
     }),
 
   getAuthStatus: publicProcedure.query(() => {
-    const authManager = getAskCodiAuthManager()
-    if (!authManager) {
-      return { authenticated: false, method: null, user: null }
-    }
+    const am = getAuthManager()
     return {
-      authenticated: authManager.isAuthenticated(),
-      method: authManager.getAuthMethod(),
-      user: authManager.getUser(),
+      authenticated: !!am?.getGatewayApiKey(),
+      user: am?.getUser() ?? null,
     }
   }),
 
+  // Logout for the AskCodi provider only clears the local models cache. The
+  // user's full session is owned by AuthManager and is logged out via the
+  // global desktopApi.logout() flow, which calls /api/auth/desktop/logout to
+  // revoke both the refresh session and the gateway key.
   logout: publicProcedure.mutation(() => {
-    const authManager = getAskCodiAuthManager()
-    if (authManager) {
-      authManager.logout()
-      cachedModels = null
-      modelsCachedAt = 0
-    }
+    cachedModels = null
+    modelsCachedAt = 0
     return { ok: true }
   }),
 })

@@ -4,7 +4,6 @@ import { existsSync, readFileSync, readlinkSync, unlinkSync } from "fs"
 import { createServer } from "http"
 import { join } from "path"
 import { AuthManager, initAuthManager, getAuthManager as getAuthManagerFromModule } from "./auth-manager"
-import { initAskCodiAuthManager } from "./askcodi-auth-manager"
 import {
   identify,
   initAnalytics,
@@ -961,13 +960,25 @@ if (gotTheLock) {
     // Build initial menu
     buildMenu()
 
-    // Initialize auth manager (uses singleton from auth-manager module)
+    // One-shot migration: delete any leftover askcodi-auth.dat from the old
+    // dual-auth-manager era. Users on that path will re-OAuth on next launch
+    // and the new exchange.js mints their gateway key automatically. Runs
+    // once per process, before AuthManager initialization.
+    const legacyAuthPath = join(app.getPath("userData"), "askcodi-auth.dat")
+    if (existsSync(legacyAuthPath)) {
+      try {
+        unlinkSync(legacyAuthPath)
+        console.log("[App] Deleted legacy askcodi-auth.dat — user will re-OAuth")
+      } catch (err) {
+        console.warn("[App] Failed to delete legacy askcodi-auth.dat:", err)
+      }
+    }
+
+    // Initialize auth manager (uses singleton from auth-manager module).
+    // OAuth is the single source of truth; AskCodi-as-provider reads the
+    // gateway key from this same AuthManager via getGatewayApiKey().
     authManager = initAuthManager(!!process.env.ELECTRON_RENDERER_URL)
     console.log("[App] Auth manager initialized")
-
-    // Initialize AskCodi auth manager
-    initAskCodiAuthManager()
-    console.log("[App] AskCodi auth manager initialized")
 
     // Initialize analytics after auth manager so we can identify user
     initAnalytics()

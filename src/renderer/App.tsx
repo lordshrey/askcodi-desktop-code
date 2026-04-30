@@ -1,4 +1,4 @@
-import { Provider as JotaiProvider, useAtom, useAtomValue, useSetAtom } from "jotai"
+import { Provider as JotaiProvider, useAtomValue, useSetAtom } from "jotai"
 import { ThemeProvider, useTheme } from "next-themes"
 import { useEffect, useMemo } from "react"
 import { Toaster } from "sonner"
@@ -10,12 +10,6 @@ import { useAgentSubChatStore } from "./features/agents/stores/sub-chat-store"
 import { AgentsLayout } from "./features/layout/agents-layout"
 import { OnboardingWizard } from "./features/onboarding-v2"
 import { identify, initAnalytics, shutdown } from "./lib/analytics"
-import {
-  anthropicOnboardingCompletedAtom,
-  apiKeyOnboardingCompletedAtom,
-  codexOnboardingCompletedAtom,
-  onboardingCompletedAtom,
-} from "./lib/atoms"
 import { appStore } from "./lib/jotai-store"
 import { VSCodeThemeProvider } from "./lib/themes/theme-provider"
 import { trpc } from "./lib/trpc"
@@ -38,17 +32,13 @@ function ThemedToaster() {
 /**
  * Main content router — decides between OnboardingWizard and AgentsLayout.
  *
- * The boot gate at src/main/windows/main.ts:820 already ensures the user is
- * authenticated (either via askcodi.com OAuth or via API key) before this
- * renderer is loaded, so we don't gate on auth here.
+ * The boot gate at src/main/windows/main.ts already ensures the user is
+ * authenticated via askcodi.com OAuth before this renderer is loaded, so we
+ * don't gate on auth here. The wizard is shown when the user has no provider
+ * connected OR no project selected — both derived from real backend state,
+ * not localStorage flags.
  */
 function AppContent() {
-  const [onboardingCompleted, setOnboardingCompleted] = useAtom(
-    onboardingCompletedAtom,
-  )
-  const anthropicCompleted = useAtomValue(anthropicOnboardingCompletedAtom)
-  const apiKeyCompleted = useAtomValue(apiKeyOnboardingCompletedAtom)
-  const codexCompleted = useAtomValue(codexOnboardingCompletedAtom)
   const selectedProject = useAtomValue(selectedProjectAtom)
   const setSelectedChatId = useSetAtom(selectedAgentChatIdAtom)
   const { setActiveSubChat, addToOpenSubChats, setChatId } = useAgentSubChatStore()
@@ -85,31 +75,14 @@ function AppContent() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
 
-  // Migration: existing users (with any legacy completion atom set AND a
-  // selected project) are auto-onboarded so they don't see the new wizard
-  // after upgrading. Runs once per session — atomWithStorage persists the flag.
-  useEffect(() => {
-    if (onboardingCompleted) return
-    const hasLegacyOnboarding =
-      anthropicCompleted || apiKeyCompleted || codexCompleted
-    if (hasLegacyOnboarding && selectedProject) {
-      console.log("[App] Migrating existing user — marking onboarding complete")
-      setOnboardingCompleted(true)
-    }
-  }, [
-    onboardingCompleted,
-    anthropicCompleted,
-    apiKeyCompleted,
-    codexCompleted,
-    selectedProject,
-    setOnboardingCompleted,
-  ])
-
-  // Fetch projects to validate selectedProject exists
+  // The boot gate already required OAuth, which implies AskCodi is connected.
+  // For returning users with a validated project we can render the dashboard
+  // immediately — the wizard runs its own provider-detection queries when it
+  // mounts. This keeps first paint off the critical path of 5 tRPC round
+  // trips for the common case.
   const { data: projects, isLoading: isLoadingProjects } =
     trpc.projects.list.useQuery()
 
-  // Validated project - only valid if exists in DB
   const validatedProject = useMemo(() => {
     if (!selectedProject) return null
     if (isLoadingProjects) return selectedProject
@@ -118,17 +91,9 @@ function AppContent() {
     return exists ? selectedProject : null
   }, [selectedProject, projects, isLoadingProjects])
 
-  // Show the wizard until it's marked complete. AgentsLayout owns its own
-  // empty state for "no selected project" — we don't bounce the user back
-  // into the wizard for that case.
-  if (!onboardingCompleted) {
-    return <OnboardingWizard />
-  }
+  if (isLoadingProjects) return null
 
-  // Suppress brief flicker while we validate the persisted selectedProject
-  if (selectedProject && isLoadingProjects && !validatedProject) {
-    return null
-  }
+  if (!validatedProject) return <OnboardingWizard />
 
   return <AgentsLayout />
 }

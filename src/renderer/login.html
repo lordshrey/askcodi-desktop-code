@@ -195,23 +195,16 @@
         <path fill-rule="evenodd" clip-rule="evenodd" d="M26.3333 12C27.2538 12 28 12.7462 28 13.6667V23.8333C28 23.9254 27.9254 24 27.8333 24H22.8333C22.7413 24 22.6667 24.0746 22.6667 24.1667V27.8333C22.6667 27.9254 22.592 28 22.5 28H13.6667C12.7462 28 12 27.2538 12 26.3333V24.1888C12 24.0717 12.0617 23.9632 12.1621 23.903L18.1504 20.3099C18.2864 20.2283 18.2408 20.0272 18.0951 20.0026L18.0651 20H12.1667C12.0746 20 12 19.9254 12 19.8333V16.1667C12 16.0746 12.0746 16 12.1667 16H18.5C18.592 16 18.6667 15.9254 18.6667 15.8333V12.1667C18.6667 12.0746 18.7413 12 18.8333 12H26.3333ZM18.8333 16C18.7413 16 18.6667 16.0746 18.6667 16.1667V23.8333C18.6667 23.9254 18.7413 24 18.8333 24H22.5C22.592 24 22.6667 23.9254 22.6667 23.8333V16.1667C22.6667 16.0746 22.592 16 22.5 16H18.8333Z" fill="#0033FF"/>
       </svg>
 
-      <button class="login-btn" id="loginBtn">Sign in</button>
+      <button class="login-btn" id="loginBtn">Sign in with AskCodi</button>
 
-      <div class="divider">or</div>
-
-      <div class="api-key-section">
-        <div class="api-key-label">Connect with API key</div>
-        <div class="api-key-row">
-          <input type="password" class="api-key-input" id="apiKeyInput" placeholder="Enter your API key..." />
-          <button class="connect-btn" id="connectBtn" disabled>Connect</button>
-        </div>
+      <div class="api-key-label" id="hint" style="text-align:center;">
+        Sign in with your AskCodi account to continue.
       </div>
 
       <div class="error-msg" id="errorMsg"></div>
     </div>
     <script>
       console.log('Login page loaded');
-      console.log('window.desktopApi:', window.desktopApi);
 
       // Listen for auth success from main process (via deep link)
       if (window.desktopApi && window.desktopApi.onAuthSuccess) {
@@ -220,8 +213,6 @@
         });
       }
 
-      var apiKeyInput = document.getElementById('apiKeyInput');
-      var connectBtn = document.getElementById('connectBtn');
       var loginBtn = document.getElementById('loginBtn');
       var errorMsg = document.getElementById('errorMsg');
 
@@ -234,26 +225,6 @@
         errorMsg.classList.remove('visible');
       }
 
-      function setLoading(loading) {
-        connectBtn.disabled = loading || !apiKeyInput.value.trim();
-        connectBtn.textContent = loading ? 'Connecting...' : 'Connect';
-        loginBtn.disabled = loading;
-        apiKeyInput.disabled = loading;
-      }
-
-      // Enable/disable connect button based on input
-      apiKeyInput.addEventListener('input', function() {
-        connectBtn.disabled = !apiKeyInput.value.trim();
-        hideError();
-      });
-
-      // Submit on Enter
-      apiKeyInput.addEventListener('keydown', function(e) {
-        if (e.key === 'Enter' && apiKeyInput.value.trim()) {
-          connectBtn.click();
-        }
-      });
-
       // Sign in via askcodi.com OAuth
       loginBtn.addEventListener('click', async function() {
         console.log('Sign in clicked');
@@ -262,44 +233,28 @@
           showError('Desktop API not available. Please restart the app.');
           return;
         }
+        loginBtn.disabled = true;
+        loginBtn.textContent = 'Opening browser...';
         try {
           var result = await window.desktopApi.startAuthFlow();
           if (result && result.ok === false) {
-            showError(result.error || 'Could not open the browser. Try the API key option below.');
+            showError(result.error || 'Could not open the browser. Please try again.');
+            loginBtn.disabled = false;
+            loginBtn.textContent = 'Sign in with AskCodi';
+            return;
           }
           // On success, the browser opens. The deep link returns to handleAuthCode()
           // which reloads this window into the main app.
+          loginBtn.textContent = 'Waiting for browser...';
+          // Restore button after 30s in case user closes the browser tab.
+          setTimeout(function() {
+            loginBtn.disabled = false;
+            loginBtn.textContent = 'Sign in with AskCodi';
+          }, 30000);
         } catch (err) {
           showError(err.message || 'Failed to start sign-in');
-        }
-      });
-
-      // Connect with API key
-      connectBtn.addEventListener('click', async function() {
-        var apiKey = apiKeyInput.value.trim();
-        if (!apiKey) return;
-
-        hideError();
-        setLoading(true);
-
-        try {
-          if (!window.desktopApi || !window.desktopApi.askCodiValidateApiKey) {
-            showError('Desktop API not available. Please restart the app.');
-            setLoading(false);
-            return;
-          }
-
-          var result = await window.desktopApi.askCodiValidateApiKey(apiKey);
-          if (result.success) {
-            // API key validated and stored - reload into main app
-            await window.desktopApi.askCodiAuthComplete();
-          } else {
-            showError(result.error || 'Invalid API key');
-            setLoading(false);
-          }
-        } catch (err) {
-          showError(err.message || 'Failed to validate API key');
-          setLoading(false);
+          loginBtn.disabled = false;
+          loginBtn.textContent = 'Sign in with AskCodi';
         }
       });
     </script>

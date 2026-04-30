@@ -948,11 +948,3 @@ export const onboardingCurrentStepAtom = atomWithStorage<OnboardingStep>(
   { getOnInit: true },
 )
 
-// Single completion flag for the new wizard. Existing users with any
-// legacy completion atom set are auto-migrated to true on first mount.
-export const onboardingCompletedAtom = atomWithStorage<boolean>(
-  "onboarding-v2:completed",
-  false,
-  undefined,
-  { getOnInit: true },
-)

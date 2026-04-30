@@ -2,7 +2,6 @@ import { useAtom, useSetAtom } from "jotai"
 import { useEffect, useRef } from "react"
 import {
   onboardingCurrentStepAtom,
-  onboardingCompletedAtom,
   type OnboardingStep,
 } from "../../lib/atoms"
 import {
@@ -18,7 +17,6 @@ type StepId = OnboardingStep // 0 = GitHub, 1 = Agents, 2 = Repo
 
 export function OnboardingWizard() {
   const [step, setStep] = useAtom(onboardingCurrentStepAtom)
-  const setCompleted = useSetAtom(onboardingCompletedAtom)
   const setSelectedProject = useSetAtom(selectedProjectAtom)
   const furthestStepRef = useRef<StepId>(step)
 
@@ -40,9 +38,11 @@ export function OnboardingWizard() {
     setStep((step + 1) as StepId)
   }
 
+  // Setting selectedProject is enough — App.tsx now derives whether to show
+  // the wizard from real provider state + selected project, so we don't need
+  // a separate "completed" localStorage flag.
   const completeWizard = (project: NonNullable<SelectedProject>) => {
     setSelectedProject(project)
-    setCompleted(true)
   }
 
   return (
