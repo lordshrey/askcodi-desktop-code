@@ -34,3 +34,6 @@ resources/bin/
 
 # Swarm iteration harness output
 test-runs/
+
+# Swarm runtime ledger (per-machine session state)
+.askcodi/

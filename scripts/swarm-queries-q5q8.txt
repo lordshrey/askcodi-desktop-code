@@ -1,0 +1,5 @@
+# Just the 4 broad queries from the mixed set, for incremental router testing.
+Q5|broad-claude-integration|How does the Claude integration work end to end? Trace from user message in the renderer through to streaming output back to the UI, covering preload, main, and renderer.
+Q6|broad-gaps|What features look stubbed out, mocked, or incomplete in this app? Look for TODOs, mock data, unconnected components, and unimplemented routes across the whole codebase.
+Q7|broad-swarm-system|How does the swarm algorithm system work? What algorithms are available, how do they share memory, how does the orchestrator coordinate subagents, and how is the suite-runner wired together?
+Q8|broad-data-flow|Trace the data flow when a user creates a new chat: input handler, IPC bridge, main-process router, database write, response back to renderer. Cover every layer.

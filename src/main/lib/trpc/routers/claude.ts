@@ -10,10 +10,15 @@ import {
   evaluatePlanModeBlock,
   normalizeOllamaToolInput,
 } from "./claude-can-use-tool-helpers"
+import { getConfiguredAlgorithm } from "../../swarm/select-algorithm"
 import {
-  buildSwarmExploreAgent,
-  mergeWithPluginAgents,
-} from "../../swarm/subagent-registry"
+  applyAlgorithmToQueryOptions,
+  type ApplyAlgorithmResult,
+  type ComposableQueryOptions,
+} from "../../swarm/integration"
+import type {
+  AlgorithmContext,
+} from "../../swarm/algorithms/algorithm"
 import {
   buildClaudeEnv,
   checkOfflineFallback,
@@ -854,6 +859,9 @@ export const claudeRouter = router({
         }
 
         ;(async () => {
+          // Hoisted so the outer finally can call finalize() regardless of
+          // where in the try the run terminates.
+          let swarmComposed: ApplyAlgorithmResult | null = null
           try {
             const db = getDatabase()
 
@@ -1646,30 +1654,58 @@ ${prompt}
                   preset: "claude_code" as const,
                 }
 
+            // Resolve the swarm algorithm (env: MAIN_VITE_SWARM_ALGORITHM).
+            // Algorithms decide their own skip semantics — if prepare()
+            // returns {skip:true}, the runtime takes the vanilla path.
+            const swarmAlgorithm = isUsingOllama
+              ? null
+              : getConfiguredAlgorithm(import.meta.env.MAIN_VITE_SWARM_ALGORITHM)
+            let swarmAugmentation = null as Awaited<
+              ReturnType<NonNullable<typeof swarmAlgorithm>["prepare"]>
+            > | null
+            if (swarmAlgorithm) {
+              try {
+                const swarmCtx: AlgorithmContext = {
+                  cwd: input.cwd,
+                  planMode: input.mode === "plan",
+                  ollama: isUsingOllama,
+                  isResume: !!resumeSessionId,
+                  pathToClaudeCodeExecutable: claudeBinaryPath,
+                }
+                const promptText =
+                  typeof finalQueryPrompt === "string" ? finalQueryPrompt : ""
+                const aug = await Promise.resolve(
+                  swarmAlgorithm.prepare(promptText, swarmCtx),
+                )
+                if (aug.skip) {
+                  console.log(
+                    `[swarm:${swarmAlgorithm.name}] skipped: ${aug.skipReason ?? "no reason given"}`,
+                  )
+                } else {
+                  swarmAugmentation = aug
+                }
+              } catch (err) {
+                console.warn(
+                  `[swarm:${swarmAlgorithm.name}] prepare() threw, falling back to vanilla path:`,
+                  err,
+                )
+              }
+            }
+
+            const baseAgents =
+              pluginAgents ??
+              (Object.keys(agentsOption).length > 0
+                ? agentsOption
+                : undefined)
+
             const queryOptions = {
               prompt: finalQueryPrompt,
               options: {
                 abortController, // Must be inside options!
                 cwd: input.cwd,
                 systemPrompt: systemPromptConfig,
-                // Register agents: plugin agents override @mention agents.
-                // Swarm subagent (swarm_explore) is added when the env flag is
-                // on; user-defined plugin agents with the same key win.
                 ...(!isUsingOllama && {
-                  agents: (() => {
-                    const baseAgents =
-                      pluginAgents ??
-                      (Object.keys(agentsOption).length > 0
-                        ? agentsOption
-                        : undefined)
-                    const swarmEnabled =
-                      (import.meta.env.MAIN_VITE_SWARM_ENABLED ?? "") === "true"
-                    if (!swarmEnabled) return baseAgents
-                    // v0.1: cold-start prompt (no fingerprint). Fingerprint
-                    // injection lands when the gateway endpoints ship.
-                    const swarmAgent = buildSwarmExploreAgent(null)
-                    return mergeWithPluginAgents(swarmAgent, baseAgents)
-                  })(),
+                  agents: baseAgents,
                 }),
                 // MCP servers: plugin MCP overrides merged MCP
                 ...((mcpServersFiltered || pluginAgents) &&
@@ -1822,6 +1858,23 @@ ${prompt}
               },
             }
 
+            // If a swarm algorithm produced an augmentation, compose its
+            // pieces (system prompt append, agent registrations, canUseTool
+            // guard, observer, finalize) onto the queryOptions. The helper
+            // wraps observer/finalize with try/catch so chat continues even
+            // when the algorithm misbehaves.
+            if (swarmAlgorithm && swarmAugmentation) {
+              swarmComposed = applyAlgorithmToQueryOptions(
+                queryOptions.options as ComposableQueryOptions,
+                swarmAugmentation,
+                {
+                  algorithmName: swarmAlgorithm.name,
+                  existingAgents: baseAgents,
+                },
+              )
+              Object.assign(queryOptions.options, swarmComposed.options)
+            }
+
             // Auto-retry for transient API errors (e.g., false-positive USAGE_POLICY_VIOLATION)
             const MAX_POLICY_RETRIES = 2
             let policyRetryCount = 0
@@ -1880,6 +1933,9 @@ ${prompt}
                       console.log(`[Ollama] Stream aborted by user`)
                     break
                   }
+
+                  // Forward to algorithm observer with try/catch isolation.
+                  swarmComposed?.handleMessage(msg)
 
                   messageCount++
 
@@ -2555,6 +2611,9 @@ ${prompt}
             safeComplete()
           } finally {
             activeSessions.delete(input.subChatId)
+            // Always-run finalize (success, error, abort). The helper
+            // already swallows + logs internal exceptions.
+            await swarmComposed?.finalize()
           }
         })()
 

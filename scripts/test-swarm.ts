@@ -39,7 +39,6 @@ type Args = {
   claudePath: string
   verbose: boolean
   algorithm: string
-  registerSwarmExplore: boolean
 }
 
 function parseArgs(argv: string[]): Args {
@@ -47,7 +46,6 @@ function parseArgs(argv: string[]): Args {
     label: "run",
     verbose: false,
     algorithm: "none",
-    registerSwarmExplore: false,
   }
   for (let i = 0; i < argv.length; i++) {
     const a = argv[i]
@@ -56,13 +54,8 @@ function parseArgs(argv: string[]): Args {
     else if (a === "--query") out.query = next()
     else if (a === "--label") out.label = next()
     else if (a === "--no-swarm") {
-      // Back-compat: alias for --algorithm none with no legacy swarm_explore.
+      // Alias for --algorithm none.
       out.algorithm = "none"
-      out.registerSwarmExplore = false
-    } else if (a === "--register-swarm-explore") {
-      // Opt-in to the legacy swarm_explore + routing-policy path. Only
-      // useful for reproducing pre-pivot positioning experiments.
-      out.registerSwarmExplore = true
     } else if (a === "--claude") out.claudePath = next()
     else if (a === "--verbose" || a === "-v") out.verbose = true
     else if (a === "--algorithm") {
@@ -114,9 +107,6 @@ Flags:
   --algorithm <name>          Swarm algorithm to wrap the SDK call:
 ${algoLines.join("\n")}
   --no-swarm                  Alias for --algorithm none.
-  --register-swarm-explore    Register the legacy v0.1 swarm_explore subagent
-                              + routing-policy systemPrompt. Pre-pivot
-                              positioning-experiment back-compat.
   --claude <path>             Path to claude binary (default: auto-detect)
   --verbose, -v               Dump full event flow rather than the curated ticker.`)
 }
@@ -204,9 +194,6 @@ async function main() {
   console.log(`[harness] cwd: ${args.cwd}`)
   console.log(`[harness] query: ${args.query}`)
   console.log(`[harness] algorithm: ${algorithm.name}`)
-  if (args.registerSwarmExplore) {
-    console.log(`[harness] legacy swarm_explore: ON (--register-swarm-explore)`)
-  }
   console.log("─".repeat(72))
 
   const sdk = await import("@anthropic-ai/claude-agent-sdk")
@@ -217,14 +204,11 @@ async function main() {
     inspectMessage(msg, stats, args.verbose)
   }
 
-  // Each algorithm consumes the base AlgorithmRunOptions + whatever extras
-  // it defines. Pass the union — algorithms ignore fields they don't know.
-  const runOpts: AlgorithmRunOptions & { registerSwarmExplore?: boolean } = {
+  const runOpts: AlgorithmRunOptions = {
     cwd: args.cwd,
     sdkQuery: sdk.query as AlgorithmRunOptions["sdkQuery"],
     pathToClaudeCodeExecutable: args.claudePath,
     onMessage: onMsg,
-    registerSwarmExplore: args.registerSwarmExplore,
   }
   const result = await algorithm.run(args.query, runOpts)
 

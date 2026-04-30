@@ -1,7 +1,7 @@
 import { AskCodiAuthStore, type AskCodiAuthData, type AskCodiUser } from "./askcodi-auth-store"
 import { app } from "electron"
 
-const ASKCODI_API_BASE = "http://127.0.0.1:8000/v1"
+const ASKCODI_API_BASE = "http://127.0.0.1:8001/v1"
 
 export class AskCodiAuthManager {
   private store: AskCodiAuthStore

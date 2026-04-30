@@ -1,0 +1,3 @@
+# Realistic single-query test: OpenAI provider abstraction.
+# One broad cross-cutting query across all 4 algorithms.
+Q1|openai-abstraction|We're planning to add OpenAI as a second provider alongside Claude. Trace the existing Claude integration end to end, identify the abstraction boundaries that need to change to support multiple providers, find every place where Claude-specific assumptions leak into the code (model strings, tool name mappings, response shapes, streaming format), and produce an ordered checklist of files to modify ranked by blast radius.

@@ -1,0 +1,10 @@
+# 7-query suite tailored to askcodi-desktop-code (Electron + tRPC + Drizzle + Claude SDK).
+# Format: Q<n>|<label>|<query text>
+# Themes overlap so warm-start algos (aco, aco-frontier) can compound priors.
+Q1|overview|What does this codebase do? Give me a one-paragraph summary plus the top 5 files a new engineer should read first.
+Q2|chat-state|How is chat session state managed across the main process, preload, and renderer? Trace from user input to where messages are persisted.
+Q3|auth|How is authentication handled in this app? What auth providers are supported, and where is the auth state stored and refreshed?
+Q4|claude-integration|How does the Claude integration work? Where are SDK calls made, how are tools invoked, and how does streaming reach the renderer?
+Q5|trpc-ipc|Map the tRPC IPC layer: what routers exist, what each exposes, and how the preload bridge connects them to the renderer.
+Q6|gaps|What features look stubbed out, mocked, or incomplete in this app? Look for TODOs, mock data, unconnected components, and unimplemented routes.
+Q7|swarm-system|How does the swarm algorithm system work? What algorithms are available, how do they share memory, and how does the orchestrator coordinate subagents?

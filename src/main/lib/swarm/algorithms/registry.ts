@@ -4,14 +4,23 @@
  *
  * Each entry implements the SwarmAlgorithm interface from `algorithm.ts`.
  */
+import { abcAlgorithm } from "./abc"
 import { acoAlgorithm } from "./aco"
+import { acoFrontierAlgorithm } from "./aco-frontier"
+import { acoRouterAlgorithm } from "./aco-router"
+import { consensusAlgorithm } from "./consensus"
+import { frontierAlgorithm } from "./frontier"
 import { noneAlgorithm } from "./none"
 import type { SwarmAlgorithm } from "./algorithm"
 
 const ALGORITHMS: SwarmAlgorithm[] = [
   noneAlgorithm,
   acoAlgorithm,
-  // Future: abcAlgorithm, consensusAlgorithm, handoffAlgorithm, ...
+  abcAlgorithm,
+  consensusAlgorithm,
+  frontierAlgorithm,
+  acoFrontierAlgorithm,
+  acoRouterAlgorithm,
 ]
 
 const BY_NAME: Record<string, SwarmAlgorithm> = Object.fromEntries(

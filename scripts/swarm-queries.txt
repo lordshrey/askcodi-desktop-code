@@ -1,0 +1,11 @@
+# 7-query suite ported from scripts/aco-compounding.sh.
+# Format: Q<n>|<label>|<query text>
+# Themes overlap deliberately so warm-start algorithms (ACO) get a chance
+# to benefit from priors built up by earlier queries.
+Q1|overview|What does this codebase do? Give me a one-paragraph summary plus the top 5 files a new engineer should read first.
+Q2|billing|How does the billing system work in this app? Trace from the user clicking upgrade through to where data is persisted.
+Q3|auth|How is authentication handled in this app? What auth providers does it support, and where is the auth state managed?
+Q4|ai-chat|How does the AI chat feature work? Where are OpenAI calls made and how is the model configuration handled?
+Q5|contexts|Map all React contexts in this codebase and explain how each is consumed by which components.
+Q6|gaps|What features look stubbed out, mocked, or incomplete in this app? Look for TODOs, mock data, unconnected components, and unimplemented routes.
+Q7|mock-webhooks|What's the difference between mockWebhooks.js and the real webhook handler? Which is currently active in the running app?

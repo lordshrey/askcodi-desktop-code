@@ -11,7 +11,7 @@ import { createAskCodiTools } from "../../askcodi/tools"
 import { getDatabase, subChats } from "../../db"
 import { publicProcedure, router } from "../index"
 
-const ASKCODI_API_BASE = "http://127.0.0.1:8000/v1"
+const ASKCODI_API_BASE = "http://127.0.0.1:8001/v1"
 
 const imageAttachmentSchema = z.object({
   base64Data: z.string(),
