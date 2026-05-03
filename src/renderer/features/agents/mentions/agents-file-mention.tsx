@@ -730,7 +730,7 @@ export const AgentsFileMention = memo(function AgentsFileMention({
   )
 
   // Fetch custom agents from filesystem (cached for 5 minutes)
-  const { data: customAgents = [], isFetching: isFetchingAgents } = trpc.agents.listEnabled.useQuery(
+  const { data: customAgents = [], isFetching: isFetchingAgents } = trpc.agentDefinitions.listEnabled.useQuery(
     projectPath ? { cwd: projectPath } : undefined,
     {
       enabled: isOpen,

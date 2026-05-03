@@ -126,7 +126,7 @@ const linearRouter = router({
     }),
 })
 
-export const tasksRouter = router({
+export const externalTasksRouter = router({
   github: githubRouter,
   linear: linearRouter,
 

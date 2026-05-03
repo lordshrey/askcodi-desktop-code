@@ -63,3 +63,72 @@ Deferred work flagged during the OAuth-only-gate + multi-provider-connect refact
 **Why:** Probably keep it for power users / SDK use cases, but worth a UX pass to surface "Desktop session" keys differently from user-created keys.
 
 **Where:** `askcodi-api-app/src/pages/api_keys.js`, `askcodi-api-app/src/views/logs/components/logs-table.js` (key name display).
+
+---
+
+## Orchestrator: Electron-aware test infrastructure
+
+**What:** Wire vitest (or equivalent) so DB-touching tests can run against the real `better-sqlite3` binary that the postinstall script rebuilds against Electron's Node ABI. Today, standalone vitest fails with `NODE_MODULE_VERSION 140 vs 127` because the binary is rebuilt for Electron, not for the test runner's Node.
+
+**Why:** `src/main/services/__tests__/issues-checkout.test.ts` is currently `describe.skip()` — the test code is correct and proves the most important orchestrator invariant (atomic checkout race), but it can't execute without Electron's binary. Each phase of the orchestrator adds more DB-touching service tests; we'll keep skipping unless this is fixed.
+
+**Options:**
+- A) `electron-mocha` or `vitest-electron-runner` — runs vitest under Electron's Node.
+- B) `playwright-electron` — heavier but also unlocks E2E flows.
+- C) Dual-build script: rebuild for Node before tests, rebuild for Electron after. Flaky in CI.
+
+**Acceptance:** `bun run test src/main/services/__tests__/issues-checkout.test.ts` runs the 4 atomic-checkout tests and they pass.
+
+**Where:** `vitest.config.ts`, `package.json` scripts, possibly a new `tests/setup-electron.ts`.
+
+---
+
+## Orchestrator: chat → issue backfill (Phase 1.5)
+
+**What:** Migration that adds `issue_id` column to `chats`, then for each existing chat creates one `issues` row (status `in_progress` if not archived else `cancelled`) and links the chat. Worktree fields move to the issue. The chat row stays as the transcript view of that issue's first run.
+
+**Why:** Existing user chats predate the orchestrator. To deliver Decision 4 from `paperclip-orchestrator-plan.md` (chats become children of issues), we need a one-time backfill. Deferred until the orchestrator works end-to-end so we don't migrate user data into something not yet validated.
+
+**Acceptance:** every existing chat has a non-null `issue_id` after migration; opening any old chat in the UI still renders the transcript correctly; rolling the migration back restores the old state cleanly.
+
+**Where:** new `drizzle/00XX_chat_issue_backfill.sql` plus a TS post-migration step in `src/main/lib/db/index.ts` to populate `issues` rows (pure SQL is awkward for the per-chat insert + update join).
+
+---
+
+## Orchestrator: issue detail view
+
+**What:** Build `src/renderer/features/orchestrator/issue-detail-view.tsx`. When the user clicks an issue in the list, slide it in from the right (or replace main content) showing: full description, comments thread, run history with status badges, plan document tab, work products tab, blockers list. Selection state is already in `selectedIssueIdAtom`.
+
+**Why:** Issue list works, runs execute, but you can't drill into an individual issue to see what happened, comment, or update the description. Without this the orchestrator's loop feels incomplete.
+
+**Where:** `src/renderer/features/orchestrator/`. Bind to `trpc.issues.get.useQuery` which already returns issue + comments + blockers + runs + documents in one shot.
+
+**Acceptance:** clicking ISS-N opens a detail panel; comments add live; clicking a run opens a sub-panel with its event stream.
+
+---
+
+## Orchestrator: run live tail
+
+**What:** Real-time streaming of run events into the UI. Today the run-store writes events to `agent_run_events` and the bulk log file, but there's no push channel — UI sees changes only on `refetchInterval` poll.
+
+**Why:** When an agent is running, the user wants to watch chunks land as they're produced. Polling at 5s is acceptable for status changes but feels broken for log content.
+
+**Options:**
+- A) tRPC subscription (preferred — already wired in this stack via SSE).
+- B) Tighten the poll to 500ms and accept extra DB pressure.
+
+**Acceptance:** clicking on a running run opens a console view that updates within 200ms of each `appendRunLog()` call.
+
+**Where:** new `src/main/lib/trpc/routers/agent-runs.ts` `subscribeEvents` procedure + `RunLiveTail.tsx` consumer.
+
+---
+
+## Orchestrator: chat → issue backfill (Phase 1.5)
+
+**What:** Migration that adds `issue_id` column to `chats`, then for each existing chat creates one `issues` row (status `in_progress` if not archived else `cancelled`) and links the chat. Worktree fields move to the issue. The chat row stays as the transcript view of that issue's first run.
+
+**Why:** Existing user chats predate the orchestrator. To deliver Decision 4 from `paperclip-orchestrator-plan.md` (chats become children of issues), we need a one-time backfill. Deferred until the orchestrator works end-to-end so we don't migrate user data into something not yet validated.
+
+**Acceptance:** every existing chat has a non-null `issue_id` after migration; opening any old chat in the UI still renders the transcript correctly; rolling the migration back restores the old state cleanly.
+
+**Where:** new `drizzle/00XX_chat_issue_backfill.sql` plus a TS post-migration step in `src/main/lib/db/index.ts` to populate `issues` rows (pure SQL is awkward for the per-chat insert + update join).

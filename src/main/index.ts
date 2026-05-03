@@ -19,6 +19,7 @@ import {
   setupFocusUpdateCheck,
 } from "./lib/auto-updater"
 import { closeDatabase, initDatabase } from "./lib/db"
+import { registerBuiltinAdapters } from "./lib/adapters"
 import {
   getLaunchDirectory,
   isCliInstalled,
@@ -992,6 +993,16 @@ if (gotTheLock) {
       console.log("[App] Database initialized")
     } catch (error) {
       console.error("[App] Failed to initialize database:", error)
+    }
+
+    // Register built-in orchestrator adapters (claude_code, codex).
+    // Must happen after database init but before the heartbeat service spins up,
+    // so any wakeup the user can trigger has an adapter to dispatch to.
+    try {
+      registerBuiltinAdapters()
+      console.log("[App] Orchestrator adapters registered")
+    } catch (error) {
+      console.error("[App] Failed to register orchestrator adapters:", error)
     }
 
     // Create main window

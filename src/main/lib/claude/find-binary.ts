@@ -1,7 +1,6 @@
 /**
- * Locate a system-installed `claude` binary. Pure-Node helper (no
- * electron dependency) so scripts and the Electron main process can both
- * use it.
+ * System-binary lookup. Pure-Node helper (no Electron dependency) so scripts
+ * and the main process can both use it.
  */
 import { execSync } from "node:child_process"
 import { existsSync } from "node:fs"
@@ -9,13 +8,17 @@ import { homedir } from "node:os"
 import { join } from "node:path"
 
 /**
- * Returns the absolute path to a `claude` binary, or null if none found.
- * Checks common install locations first, then `which claude` as a fallback
- * (catches custom install dirs from nvm, asdf, mise, etc.).
+ * Returns the absolute path to `name` (e.g. "claude", "codex"), or null if
+ * not found. Checks `extraPaths`, then standard install locations, then
+ * `which`/`where` (catches nvm, asdf, mise, etc.).
  */
-export function findSystemClaude(): string | null {
-  const binaryName = process.platform === "win32" ? "claude.exe" : "claude"
+export function findSystemBinary(
+  name: string,
+  extraPaths: string[] = [],
+): string | null {
+  const binaryName = process.platform === "win32" ? `${name}.exe` : name
   const candidates = [
+    ...extraPaths,
     join(homedir(), ".local", "bin", binaryName),
     `/usr/local/bin/${binaryName}`,
     `/opt/homebrew/bin/${binaryName}`,
@@ -39,4 +42,9 @@ export function findSystemClaude(): string | null {
     // not on PATH
   }
   return null
+}
+
+/** @deprecated use `findSystemBinary("claude")` */
+export function findSystemClaude(): string | null {
+  return findSystemBinary("claude")
 }

@@ -1,26 +1,39 @@
+interface FormatTimeAgoOptions {
+  /** Suffix appended to non-"now" outputs, e.g. " ago" → "5m ago". Default: "". */
+  suffix?: string
+  /** What to render for sub-minute durations. Default: "now". */
+  nowLabel?: string
+  /** What to render for null/undefined input. Default: same as nowLabel. */
+  nullLabel?: string
+}
+
 /**
- * Format a timestamp as a relative time string (e.g., "5m", "3h", "2d")
- * Used for displaying chat timestamps in a compact format
+ * Format a timestamp as a relative time string (e.g., "5m", "3h", "2d").
+ * Pass `{ suffix: " ago" }` for "5m ago" formatting.
  */
-export function formatTimeAgo(timestamp: Date | string | undefined): string {
-  if (!timestamp) return "now"
+export function formatTimeAgo(
+  timestamp: Date | string | null | undefined,
+  options: FormatTimeAgoOptions = {},
+): string {
+  const { suffix = "", nowLabel = "now", nullLabel } = options
+  if (!timestamp) return nullLabel ?? nowLabel
 
   const date = timestamp instanceof Date ? timestamp : new Date(timestamp)
-  const now = new Date()
-  const diff = Math.floor((now.getTime() - date.getTime()) / 1000)
+  const diff = Math.floor((Date.now() - date.getTime()) / 1000)
+  if (diff < 60) return nowLabel
 
-  if (diff < 60) return "now"
+  const minute = 60
+  const hour = 60 * minute
+  const day = 24 * hour
+  const month = 30 * day
+  const year = 365 * day
 
-  const years = Math.floor(diff / (60 * 60 * 24 * 365))
-  const months = Math.floor((diff % (60 * 60 * 24 * 365)) / (60 * 60 * 24 * 30))
-  const days = Math.floor((diff % (60 * 60 * 24 * 30)) / (60 * 60 * 24))
-  const hours = Math.floor((diff % (60 * 60 * 24)) / (60 * 60))
-  const minutes = Math.floor((diff % (60 * 60)) / 60)
+  let unit: string
+  if (diff >= year) unit = `${Math.floor(diff / year)}y`
+  else if (diff >= month) unit = `${Math.floor(diff / month)}mo`
+  else if (diff >= day) unit = `${Math.floor(diff / day)}d`
+  else if (diff >= hour) unit = `${Math.floor(diff / hour)}h`
+  else unit = `${Math.floor(diff / minute)}m`
 
-  if (years > 0) return `${years}y`
-  if (months > 0) return `${months}mo`
-  if (days > 0) return `${days}d`
-  if (hours > 0) return `${hours}h`
-  if (minutes > 0) return `${minutes}m`
-  return "now"
+  return unit + suffix
 }

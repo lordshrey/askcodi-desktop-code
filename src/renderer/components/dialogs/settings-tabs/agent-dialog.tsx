@@ -39,14 +39,14 @@ export function AgentDialog({ open, onOpenChange, agent, onSuccess }: AgentDialo
   const [toolMode, setToolMode] = useState<ToolMode>("all")
   const [selectedTools, setSelectedTools] = useState<string[]>([])
 
-  const createMutation = trpc.agents.create.useMutation({
+  const createMutation = trpc.agentDefinitions.create.useMutation({
     onSuccess: () => {
       onSuccess()
       resetForm()
     },
   })
 
-  const updateMutation = trpc.agents.update.useMutation({
+  const updateMutation = trpc.agentDefinitions.update.useMutation({
     onSuccess: () => {
       onSuccess()
       resetForm()

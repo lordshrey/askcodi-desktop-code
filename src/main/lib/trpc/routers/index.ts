@@ -13,14 +13,18 @@ import { externalRouter } from "./external"
 import { filesRouter } from "./files"
 import { debugRouter } from "./debug"
 import { skillsRouter } from "./skills"
-import { agentsRouter } from "./agents"
+import { agentDefinitionsRouter } from "./agent-definitions"
 import { worktreeConfigRouter } from "./worktree-config"
 import { sandboxImportRouter } from "./sandbox-import"
 import { commandsRouter } from "./commands"
 import { voiceRouter } from "./voice"
 import { pluginsRouter } from "./plugins"
 import { integrationsRouter } from "./integrations"
-import { tasksRouter } from "./tasks"
+import { externalTasksRouter } from "./external-tasks"
+import { runtimeAgentsRouter } from "./runtime-agents"
+import { issuesRouter } from "./issues"
+import { agentRunsRouter } from "./agent-runs"
+import { activityRouter } from "./activity"
 import { createGitRouter } from "../../git"
 import { BrowserWindow } from "electron"
 
@@ -44,14 +48,19 @@ export function createAppRouter(getWindow: () => BrowserWindow | null) {
     files: filesRouter,
     debug: debugRouter,
     skills: skillsRouter,
-    agents: agentsRouter,
+    agentDefinitions: agentDefinitionsRouter,
     worktreeConfig: worktreeConfigRouter,
     sandboxImport: sandboxImportRouter,
     commands: commandsRouter,
     voice: voiceRouter,
     plugins: pluginsRouter,
     integrations: integrationsRouter,
-    tasks: tasksRouter,
+    externalTasks: externalTasksRouter,
+    // Orchestrator surface (paperclip-style)
+    runtimeAgents: runtimeAgentsRouter,
+    issues: issuesRouter,
+    agentRuns: agentRunsRouter,
+    activity: activityRouter,
     // Git operations - named "changes" to match Superset API
     changes: createGitRouter(),
   })

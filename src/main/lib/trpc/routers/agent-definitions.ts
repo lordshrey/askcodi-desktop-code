@@ -62,7 +62,7 @@ const listAgentsProcedure = publicProcedure
     return [...projectAgents, ...userAgents, ...pluginAgents]
   })
 
-export const agentsRouter = router({
+export const agentDefinitionsRouter = router({
   /**
    * List all agents from filesystem
    * - User agents: ~/.claude/agents/

@@ -172,3 +172,20 @@ export type NewAnthropicAccount = typeof anthropicAccounts.$inferInsert
 export type AnthropicSettings = typeof anthropicSettings.$inferSelect
 export type Integration = typeof integrations.$inferSelect
 export type NewIntegration = typeof integrations.$inferInsert
+
+// ============ ORCHESTRATOR TABLES (paperclip-style) ============
+// Tables added for the agent orchestrator. Each lives in its own file for clarity.
+// Re-exported here so existing import paths (`from "../db"` / `from "./schema"`) keep working.
+export * from "./runtime-agents"
+export * from "./issues"
+export * from "./issue-relations"
+export * from "./issue-comments"
+export * from "./issue-documents"
+export * from "./issue-work-products"
+export * from "./agent-wakeup-requests"
+export * from "./agent-runs"
+export * from "./agent-run-events"
+export * from "./agent-task-sessions"
+export * from "./agent-runtime-state"
+export * from "./cost-events"
+export * from "./activity-log"

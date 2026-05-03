@@ -85,6 +85,13 @@
       "when": 1775310916000,
       "tag": "0011_plugin_mode",
       "breakpoints": true
+    },
+    {
+      "idx": 12,
+      "version": "6",
+      "when": 1777817681951,
+      "tag": "0012_right_tomas",
+      "breakpoints": true
     }
   ]
 }

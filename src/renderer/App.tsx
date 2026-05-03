@@ -9,6 +9,8 @@ import { selectedProjectAtom, selectedAgentChatIdAtom } from "./features/agents/
 import { useAgentSubChatStore } from "./features/agents/stores/sub-chat-store"
 import { AgentsLayout } from "./features/layout/agents-layout"
 import { OnboardingWizard } from "./features/onboarding-v2"
+import { OrchestratorLayout, appModeAtom } from "./features/orchestrator"
+import { ChatToOrchestratorToggle } from "./features/orchestrator/mode-toggle"
 import { identify, initAnalytics, shutdown } from "./lib/analytics"
 import { appStore } from "./lib/jotai-store"
 import { VSCodeThemeProvider } from "./lib/themes/theme-provider"
@@ -40,6 +42,7 @@ function ThemedToaster() {
  */
 function AppContent() {
   const selectedProject = useAtomValue(selectedProjectAtom)
+  const appMode = useAtomValue(appModeAtom)
   const setSelectedChatId = useSetAtom(selectedAgentChatIdAtom)
   const { setActiveSubChat, addToOpenSubChats, setChatId } = useAgentSubChatStore()
 
@@ -93,9 +96,17 @@ function AppContent() {
 
   if (isLoadingProjects) return null
 
+  // Orchestrator mode bypasses the project gate — it can run with no projects.
+  if (appMode === "orchestrator") return <OrchestratorLayout />
+
   if (!validatedProject) return <OnboardingWizard />
 
-  return <AgentsLayout />
+  return (
+    <>
+      <AgentsLayout />
+      <ChatToOrchestratorToggle />
+    </>
+  )
 }
 
 export function App() {

@@ -107,7 +107,7 @@ export function WorkOnTaskDialog({
     setSelectedModelId("")
   }, [])
 
-  const createMutation = trpc.tasks.createFromExternal.useMutation()
+  const createMutation = trpc.externalTasks.createFromExternal.useMutation()
   const createSubChatMutation = trpc.chats.createSubChat.useMutation()
   const setSourceFieldsMutation = trpc.chats.setSourceFields.useMutation()
 

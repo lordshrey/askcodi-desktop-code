@@ -98,7 +98,7 @@ export function TasksView() {
 
 function GitHubTab() {
   const { data: githubStatus } = trpc.integrations.getGithubStatus.useQuery()
-  const { data: repos } = trpc.tasks.github.listRepos.useQuery(
+  const { data: repos } = trpc.externalTasks.github.listRepos.useQuery(
     undefined,
     { enabled: githubStatus?.isConnected === true }
   )
@@ -333,11 +333,11 @@ function GitHubList({ owner, repo, type, onSelect }: {
   const setDesktopView = useSetAtom(desktopViewAtom)
   const [page, setPage] = useState(1)
 
-  const { data: issues, isLoading: issuesLoading, isFetching: issuesFetching, refetch: refetchIssues } = trpc.tasks.github.listIssues.useQuery(
+  const { data: issues, isLoading: issuesLoading, isFetching: issuesFetching, refetch: refetchIssues } = trpc.externalTasks.github.listIssues.useQuery(
     { owner, repo, state: "open", page },
     { enabled: type === "issues" }
   )
-  const { data: pulls, isLoading: pullsLoading, isFetching: pullsFetching, refetch: refetchPulls } = trpc.tasks.github.listPullRequests.useQuery(
+  const { data: pulls, isLoading: pullsLoading, isFetching: pullsFetching, refetch: refetchPulls } = trpc.externalTasks.github.listPullRequests.useQuery(
     { owner, repo, state: "open", page },
     { enabled: type === "pulls" }
   )
@@ -519,8 +519,8 @@ function GitHubDetailPanel({ owner, repo, item, type, onBack, onWorkOn }: {
   const setDesktopView = useSetAtom(desktopViewAtom)
 
   const { data: detail, isLoading } = type === "issues"
-    ? trpc.tasks.github.getIssueDetail.useQuery({ owner, repo, number: item.number })
-    : trpc.tasks.github.getPullRequestDetail.useQuery({ owner, repo, number: item.number })
+    ? trpc.externalTasks.github.getIssueDetail.useQuery({ owner, repo, number: item.number })
+    : trpc.externalTasks.github.getPullRequestDetail.useQuery({ owner, repo, number: item.number })
 
   // Check if this task has a linked workspace
   const { data: linkedChats } = trpc.chats.getBySourceUrls.useQuery(
@@ -680,7 +680,7 @@ function GitHubDetailPanel({ owner, repo, item, type, onBack, onWorkOn }: {
 
 function LinearTab() {
   const { data: linearStatus, error: linearStatusError } = trpc.integrations.getLinearStatus.useQuery()
-  const { data: teams, isLoading: teamsLoading, error: teamsError } = trpc.tasks.linear.listTeams.useQuery(
+  const { data: teams, isLoading: teamsLoading, error: teamsError } = trpc.externalTasks.linear.listTeams.useQuery(
     undefined,
     { enabled: linearStatus?.isConnected === true }
   )
@@ -696,7 +696,7 @@ function LinearTab() {
   const effectiveTeamId = selectedTeamId ?? teams?.[0]?.id ?? null
   console.log("[TasksView:Linear] effectiveTeamId:", effectiveTeamId, "selectedTeamId:", selectedTeamId)
 
-  const { data: linearProjects, error: projectsError } = trpc.tasks.linear.listProjects.useQuery(
+  const { data: linearProjects, error: projectsError } = trpc.externalTasks.linear.listProjects.useQuery(
     { teamId: effectiveTeamId ?? undefined },
     { enabled: !!effectiveTeamId }
   )
@@ -788,7 +788,7 @@ function LinearList({ teamId, projectId, onSelect }: {
   const setSelectedChatId = useSetAtom(selectedAgentChatIdAtom)
   const setDesktopView = useSetAtom(desktopViewAtom)
 
-  const { data: issues, isLoading, isFetching, refetch, error: issuesError } = trpc.tasks.linear.listIssues.useQuery({
+  const { data: issues, isLoading, isFetching, refetch, error: issuesError } = trpc.externalTasks.linear.listIssues.useQuery({
     teamId,
     projectId: projectId ?? undefined,
     limit: 50,
@@ -949,7 +949,7 @@ function LinearDetailPanel({ item, onBack, onWorkOn }: {
   const setSelectedChatId = useSetAtom(selectedAgentChatIdAtom)
   const setDesktopView = useSetAtom(desktopViewAtom)
 
-  const { data: detail, isLoading } = trpc.tasks.linear.getIssueDetail.useQuery(
+  const { data: detail, isLoading } = trpc.externalTasks.linear.getIssueDetail.useQuery(
     { issueId: item.id }
   )
 

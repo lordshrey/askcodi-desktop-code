@@ -309,12 +309,12 @@ export function AgentsCustomAgentsTab() {
   }, [])
   const selectedProject = useAtomValue(selectedProjectAtom)
 
-  const { data: agents = [], isLoading, refetch } = trpc.agents.list.useQuery(
+  const { data: agents = [], isLoading, refetch } = trpc.agentDefinitions.list.useQuery(
     selectedProject?.path ? { cwd: selectedProject.path } : undefined,
   )
 
-  const updateMutation = trpc.agents.update.useMutation()
-  const createMutation = trpc.agents.create.useMutation()
+  const updateMutation = trpc.agentDefinitions.update.useMutation()
+  const createMutation = trpc.agentDefinitions.create.useMutation()
 
   const handleCreate = useCallback(async (data: {
     name: string; description: string; prompt: string; model?: string; source: "user" | "project"
