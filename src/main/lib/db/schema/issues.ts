@@ -44,7 +44,7 @@ export const issues = sqliteTable("issues", {
   executionAgentNameKey: text("execution_agent_name_key"),
   executionLockedAt: integer("execution_locked_at", { mode: "timestamp" }),
   // Origin tracking (where this issue came from)
-  originKind: text("origin_kind").notNull().default("manual"),  // manual | external_task_link | routine | child_of_issue
+  originKind: text("origin_kind").notNull().default("manual"),  // manual | external_task_link | routine | child_of_issue | auto_hire
   originId: text("origin_id"),                                  // external task ID, routine ID, etc.
   originRunId: text("origin_run_id"),                           // run that created this issue
   originFingerprint: text("origin_fingerprint"),                // dedup key for routine fires

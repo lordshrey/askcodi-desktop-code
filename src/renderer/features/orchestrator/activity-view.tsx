@@ -1,8 +1,5 @@
 import { trpc } from "@/lib/trpc"
-import { formatTimeAgo } from "@/lib/utils/format-time-ago"
-
-const timeAgo = (d: Date | string | null | undefined) =>
-  formatTimeAgo(d, { suffix: " ago", nullLabel: "—" })
+import { timeAgo } from "./status-meta"
 
 const ACTOR_BADGE: Record<string, string> = {
   user: "bg-blue-500/10 text-blue-400 border-blue-500/30",

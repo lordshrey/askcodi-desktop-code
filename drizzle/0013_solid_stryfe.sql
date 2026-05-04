@@ -1,0 +1,2 @@
+ALTER TABLE `runtime_agents` ADD `is_founding` integer DEFAULT false NOT NULL;--> statement-breakpoint
+CREATE UNIQUE INDEX `runtime_agents_founding_per_project_uq` ON `runtime_agents` (`default_project_id`) WHERE "runtime_agents"."is_founding" = 1;

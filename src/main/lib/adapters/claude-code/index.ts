@@ -12,6 +12,13 @@ import { claudeCodeSessionCodec } from "./codec"
 import { buildIssuePrompt } from "../_shared/build-issue-prompt"
 import { findAdapterBinary } from "../_shared/find-binary"
 import { isTransientUpstreamError } from "../_shared/error-classification"
+import { createOrchestratorMcpServer } from "../../mcp/orchestrator-server"
+import { getDatabase, runtimeAgents } from "../../db"
+import { eq } from "drizzle-orm"
+import {
+  loadFoundingEngineerSystemPrompt,
+  isFoundingEngineer,
+} from "../../agents/founding-engineer"
 
 // Claude Code adapter for the orchestrator.
 //
@@ -112,9 +119,37 @@ async function executeClaudeRun(ctx: AdapterExecutionContext): Promise<AdapterEx
       ? ctx.runtime.sessionParams.sessionId
       : null
 
+  // Build the orchestrator MCP server bound to this run's auth context. The
+  // calling agent's project scopes default tool inputs (createIssue without an
+  // explicit projectId lands in the calling agent's project).
+  const db = getDatabase()
+  const callingAgent = db
+    .select()
+    .from(runtimeAgents)
+    .where(eq(runtimeAgents.id, ctx.agentId))
+    .get()
+  const mcpServer = await createOrchestratorMcpServer({
+    callingAgentId: ctx.agentId,
+    runId: ctx.runId,
+    defaultProjectId: callingAgent?.defaultProjectId ?? null,
+  })
+
+  // Founding engineer gets the role-specific system prompt prepended.
+  const systemPromptAppend =
+    callingAgent && isFoundingEngineer(callingAgent)
+      ? await loadFoundingEngineerSystemPrompt()
+      : null
+
   await ctx.onMeta({
     type: "lifecycle",
-    data: { phase: "starting", model, maxTurns, mode, resumed: priorSessionId !== null },
+    data: {
+      phase: "starting",
+      model,
+      maxTurns,
+      mode,
+      resumed: priorSessionId !== null,
+      isFounding: callingAgent ? isFoundingEngineer(callingAgent) : false,
+    },
   })
 
   let stream
@@ -127,6 +162,16 @@ async function executeClaudeRun(ctx: AdapterExecutionContext): Promise<AdapterEx
         abortController,
         maxTurns,
         permissionMode: mode === "plan" ? "plan" : "bypassPermissions",
+        mcpServers: { askcodi: mcpServer },
+        ...(systemPromptAppend
+          ? {
+              systemPrompt: {
+                type: "preset" as const,
+                preset: "claude_code" as const,
+                append: systemPromptAppend,
+              },
+            }
+          : {}),
         ...(priorSessionId ? { resume: priorSessionId } : {}),
       },
     })

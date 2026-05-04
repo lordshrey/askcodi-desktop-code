@@ -2,6 +2,7 @@ import * as fs from "node:fs/promises"
 import * as path from "node:path"
 import * as crypto from "node:crypto"
 import * as zlib from "node:zlib"
+import { EventEmitter } from "node:events"
 import { promisify } from "node:util"
 import { app } from "electron"
 import { eq, sql } from "drizzle-orm"
@@ -10,9 +11,74 @@ import {
   agentRuns,
   agentRunEvents,
   type NewAgentRunEvent,
+  type AgentRunEvent,
 } from "../db"
 
 const gzipAsync = promisify(zlib.gzip)
+
+// Per-run event types written by the heartbeat / adapter pipeline. Centralized
+// so renderer summarizers, persistence, and adapters can share the constant set.
+export const RUN_EVENT_TYPES = [
+  "stdout",
+  "stderr",
+  "lifecycle",
+  "tool_call",
+  "tool_result",
+  "tool_error",
+  "command_execution",
+  "file_change",
+  "thinking",
+  "meta",
+  "spawn",
+  "system",
+  "todo_list",
+  "web_search",
+  "thread_started",
+  "turn_started",
+  "turn_completed",
+  "turn_failed",
+  "mcp_tool_call",
+] as const
+export type RunEventType = (typeof RUN_EVENT_TYPES)[number]
+
+// Live event bus: each persisted agent_run_events row is emitted here so tRPC
+// subscriptions can stream events without polling the events table.
+//
+// External callers should NOT touch the bus directly — use subscribeToRun()
+// below, which hides the event-key format and the per-bus listener cap.
+class RunEventBus extends EventEmitter {
+  constructor() {
+    super()
+    this.setMaxListeners(100)
+  }
+}
+
+const runEventBus = new RunEventBus()
+
+interface SubscribeToRunHandlers {
+  onEvent: (event: AgentRunEvent) => void
+  onTerminal: (payload: { status: string }) => void
+}
+
+/**
+ * Subscribe to a run's live events and terminal notification. Returns an
+ * unsubscribe function. Used by tRPC subscriptions in the agent-runs router;
+ * cleanup is required on close.
+ */
+export function subscribeToRun(
+  runId: string,
+  handlers: SubscribeToRunHandlers,
+): () => void {
+  const onEvent = (ev: AgentRunEvent) => handlers.onEvent(ev)
+  const onTerminal = (payload: { runId: string; status: string }) =>
+    handlers.onTerminal({ status: payload.status })
+  runEventBus.on(`event:${runId}`, onEvent)
+  runEventBus.on(`terminal:${runId}`, onTerminal)
+  return () => {
+    runEventBus.off(`event:${runId}`, onEvent)
+    runEventBus.off(`terminal:${runId}`, onTerminal)
+  }
+}
 
 // Run log persistence. Three sinks:
 //   1) agent_run_events table  — one row per chunk; queryable, replayable
@@ -124,7 +190,15 @@ export async function appendRunLog(
       message: truncated,
       payload: options?.payload ?? null,
     }
-    db.insert(agentRunEvents).values(event).run()
+    const inserted = db.insert(agentRunEvents).values(event).returning().all()[0]
+    // Notify live subscribers (used by run-console live tail). Best-effort —
+    // listener errors must not crash the writer.
+    try {
+      runEventBus.emit(`event:${runId}`, inserted)
+    } catch (emitError) {
+      // eslint-disable-next-line no-console
+      console.error("[run-store] runEventBus emit failed:", emitError)
+    }
 
     // Bulk file
     if (handle.fileHandle) {
@@ -246,6 +320,18 @@ export async function finalizeRunLog(runId: string): Promise<FinalizeRunLogResul
   }
 }
 
+/**
+ * Emit a terminal notification for `runId`. Called from the heartbeat service
+ * after `persistFinalResult`. Subscribers use this to close their stream.
+ */
+export function emitRunTerminal(runId: string, status: string): void {
+  try {
+    runEventBus.emit(`terminal:${runId}`, { runId, status })
+  } catch {
+    // best-effort
+  }
+}
+
 // Test helper.
 export function __resetRunStoreForTests(): void {
   for (const handle of handles.values()) {
@@ -254,3 +340,6 @@ export function __resetRunStoreForTests(): void {
   handles.clear()
   runsDirCached = null
 }
+
+// Re-export AgentRunEvent so subscribers don't have to dig through the db barrel.
+export type { AgentRunEvent }

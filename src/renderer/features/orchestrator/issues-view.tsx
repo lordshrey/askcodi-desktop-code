@@ -1,26 +1,16 @@
 import { useMemo, useState } from "react"
 import { useSetAtom } from "jotai"
-import { Plus, Search, Play, Circle, CircleDot, CircleCheck, CircleX, CircleDashed } from "lucide-react"
+import { Plus, Search, Play } from "lucide-react"
 import { cn } from "@/lib/utils"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { trpc, type RouterOutputs } from "@/lib/trpc"
 import { selectedIssueIdAtom } from "./atoms"
 import { NewIssueDialog } from "./new-issue-dialog"
-import { formatTimeAgo } from "@/lib/utils/format-time-ago"
+import { ISSUE_STATUS_META, timeAgo } from "./status-meta"
 
 type IssueRow = RouterOutputs["issues"]["list"][number]
 type AgentRow = RouterOutputs["runtimeAgents"]["list"][number]
-
-const STATUS_META: Record<string, { Icon: typeof Circle; color: string; label: string }> = {
-  backlog: { Icon: Circle, color: "text-muted-foreground", label: "Backlog" },
-  todo: { Icon: Circle, color: "text-rose-400", label: "Todo" },
-  in_progress: { Icon: CircleDot, color: "text-amber-400", label: "In progress" },
-  in_review: { Icon: CircleDashed, color: "text-blue-400", label: "In review" },
-  blocked: { Icon: CircleX, color: "text-red-500", label: "Blocked" },
-  done: { Icon: CircleCheck, color: "text-emerald-500", label: "Done" },
-  cancelled: { Icon: CircleX, color: "text-muted-foreground", label: "Cancelled" },
-}
 
 const PRIORITY_DOT: Record<string, string> = {
   urgent: "bg-red-500",
@@ -28,9 +18,6 @@ const PRIORITY_DOT: Record<string, string> = {
   medium: "bg-amber-500",
   low: "bg-muted-foreground",
 }
-
-const timeAgo = (d: Date | string | null | undefined) =>
-  formatTimeAgo(d, { suffix: " ago", nullLabel: "—" })
 
 export function IssuesView() {
   const [search, setSearch] = useState("")
@@ -159,7 +146,7 @@ function IssueRow({
   runDisabled,
   depth = 0,
 }: IssueRowProps) {
-  const meta = STATUS_META[issue.status] ?? STATUS_META.backlog
+  const meta = ISSUE_STATUS_META[issue.status] ?? ISSUE_STATUS_META.backlog
   const assignee = issue.assigneeRuntimeAgentId ? agentById.get(issue.assigneeRuntimeAgentId) : null
   return (
     <>

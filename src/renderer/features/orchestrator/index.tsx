@@ -4,7 +4,9 @@ import { DashboardView } from "./dashboard-view"
 import { IssuesView } from "./issues-view"
 import { AgentsView } from "./agents-view"
 import { ActivityView } from "./activity-view"
-import { orchestratorRouteAtom } from "./atoms"
+import { IssueDetailView } from "./issue-detail-view"
+import { orchestratorRouteAtom, selectedIssueIdAtom } from "./atoms"
+import { useEnsureFoundingEngineer } from "./use-ensure-founding-engineer"
 
 /**
  * Orchestrator surface — the paperclip-style multi-agent control plane.
@@ -19,14 +21,26 @@ import { orchestratorRouteAtom } from "./atoms"
  */
 export function OrchestratorLayout() {
   const route = useAtomValue(orchestratorRouteAtom)
+  const selectedIssueId = useAtomValue(selectedIssueIdAtom)
+  // Auto-hires the Founding Engineer on first project load. Idempotent.
+  useEnsureFoundingEngineer()
   return (
     <div className="flex h-screen overflow-hidden bg-background">
       <OrchestratorSidebar />
       <main className="flex-1 overflow-hidden">
-        {route === "dashboard" && <DashboardView />}
-        {route === "issues" && <IssuesView />}
-        {route === "agents" && <AgentsView />}
-        {route === "activity" && <ActivityView />}
+        {/* Issue detail takes precedence over the route when an issue is selected,
+            so clicking a row in any list opens the detail without changing the
+            sidebar state. */}
+        {selectedIssueId ? (
+          <IssueDetailView issueId={selectedIssueId} />
+        ) : (
+          <>
+            {route === "dashboard" && <DashboardView />}
+            {route === "issues" && <IssuesView />}
+            {route === "agents" && <AgentsView />}
+            {route === "activity" && <ActivityView />}
+          </>
+        )}
       </main>
     </div>
   )

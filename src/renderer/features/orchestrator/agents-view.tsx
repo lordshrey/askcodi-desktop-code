@@ -96,7 +96,17 @@ export function AgentsView() {
                     {agent.icon ?? agent.name.slice(0, 2).toUpperCase()}
                   </div>
                   <div className="min-w-0 flex-1">
-                    <div className="truncate text-sm font-medium">{agent.name}</div>
+                    <div className="flex items-center gap-1.5 truncate text-sm font-medium">
+                      {agent.name}
+                      {agent.isFounding && (
+                        <span
+                          className="rounded border border-amber-500/40 bg-amber-500/10 px-1.5 py-0.5 text-[10px] font-medium uppercase tracking-wide text-amber-400"
+                          title="Founding engineer — auto-hired on project load, cannot be terminated"
+                        >
+                          Founding
+                        </span>
+                      )}
+                    </div>
                     <div className="truncate text-xs text-muted-foreground">
                       {agent.title || agent.role}
                     </div>
@@ -158,7 +168,7 @@ export function AgentsView() {
                       Pause
                     </Button>
                   ) : null}
-                  {agent.status !== "terminated" && (
+                  {agent.status !== "terminated" && !agent.isFounding && (
                     <Button
                       size="sm"
                       variant="ghost"

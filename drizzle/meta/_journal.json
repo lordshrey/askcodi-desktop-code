@@ -92,6 +92,13 @@
       "when": 1777817681951,
       "tag": "0012_right_tomas",
       "breakpoints": true
+    },
+    {
+      "idx": 13,
+      "version": "6",
+      "when": 1777840165938,
+      "tag": "0013_solid_stryfe",
+      "breakpoints": true
     }
   ]
 }

@@ -1,5 +1,5 @@
-import { sqliteTable, text, integer, index, type AnySQLiteColumn } from "drizzle-orm/sqlite-core"
-import { relations } from "drizzle-orm"
+import { sqliteTable, text, integer, index, uniqueIndex, type AnySQLiteColumn } from "drizzle-orm/sqlite-core"
+import { relations, sql } from "drizzle-orm"
 import { createId } from "../utils"
 import { projects } from "./index"
 
@@ -22,6 +22,9 @@ export const runtimeAgents = sqliteTable("runtime_agents", {
   title: text("title"),
   icon: text("icon"),
   status: text("status").notNull().default("idle"),        // idle | running | paused | terminated | pending_approval
+  // Marks the founding engineer auto-hired on project load. Cannot be terminated; can hire others.
+  // At most one founding engineer per project (enforced by partial unique index below).
+  isFounding: integer("is_founding", { mode: "boolean" }).notNull().default(false),
   reportsTo: text("reports_to").references((): AnySQLiteColumn => runtimeAgents.id, { onDelete: "set null" }),
   adapterType: text("adapter_type").notNull(),             // claude_code | claude_api | codex | cursor | ollama
   adapterConfig: text("adapter_config", { mode: "json" })
@@ -45,6 +48,10 @@ export const runtimeAgents = sqliteTable("runtime_agents", {
 }, (t) => [
   index("runtime_agents_status_idx").on(t.status),
   index("runtime_agents_reports_to_idx").on(t.reportsTo),
+  // At most one founding engineer per project. Partial unique on is_founding=true.
+  uniqueIndex("runtime_agents_founding_per_project_uq")
+    .on(t.defaultProjectId)
+    .where(sql`${t.isFounding} = 1`),
 ])
 
 export const runtimeAgentsRelations = relations(runtimeAgents, ({ one, many }) => ({

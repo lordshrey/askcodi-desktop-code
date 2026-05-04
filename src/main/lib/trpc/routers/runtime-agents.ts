@@ -11,6 +11,7 @@ import {
 import { tryGet as tryGetAdapter, list as listAdapters } from "../../adapters"
 import { logActivity } from "../../services/activity-log"
 import { ADAPTER_TYPES, type AdapterType } from "../../../../shared/types/adapter"
+import { ensureFoundingEngineer } from "../../agents/founding-engineer"
 
 // tRPC router for orchestrated runtime agents (CEO, engineers, designers...).
 // Mirrors paperclip's /agents endpoints, single-user shape.
@@ -207,12 +208,24 @@ export const runtimeAgentsRouter = router({
 
   /**
    * Terminate (soft-delete). Row is preserved for audit; status flips to "terminated" so
-   * preflight gates refuse future wakeups.
+   * preflight gates refuse future wakeups. The founding engineer cannot be terminated —
+   * the user owns it for the lifetime of the project.
    */
   terminate: publicProcedure
     .input(z.object({ id: z.string(), reason: z.string().optional() }))
     .mutation(async ({ input }) => {
       const db = getDatabase()
+      const existing = db
+        .select()
+        .from(runtimeAgents)
+        .where(eq(runtimeAgents.id, input.id))
+        .get()
+      if (!existing) throw new Error("Agent not found")
+      if (existing.isFounding) {
+        throw new Error(
+          "Founding engineer cannot be terminated. Pause if you need to stop them temporarily.",
+        )
+      }
       db
         .update(runtimeAgents)
         .set({ status: "terminated", pauseReason: input.reason ?? null, updatedAt: new Date() })
@@ -228,6 +241,17 @@ export const runtimeAgentsRouter = router({
         details: { reason: input.reason ?? null },
       })
       return { ok: true }
+    }),
+
+  /**
+   * Idempotently ensure a founding engineer is hired for the given project.
+   * Called from the renderer when a project is selected. Safe to call repeatedly —
+   * second + later calls are no-ops that return the existing agent.
+   */
+  ensureFoundingEngineer: publicProcedure
+    .input(z.object({ projectId: z.string() }))
+    .mutation(async ({ input }) => {
+      return ensureFoundingEngineer(input.projectId)
     }),
 
   /**

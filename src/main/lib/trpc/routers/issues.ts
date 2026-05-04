@@ -20,6 +20,7 @@ import {
   IssueBlockedError,
 } from "../../services/issues"
 import { enqueueWakeup } from "../../services/heartbeat"
+import { wakeOnAssignment, issueTaskKey } from "../../services/wake"
 import { logActivity } from "../../services/activity-log"
 
 // tRPC router for native orchestrator issues.
@@ -184,21 +185,17 @@ export const issuesRouter = router({
       details: { fromStatus: existing.status, toStatus: input.status, fields: Object.keys(updates) },
     })
 
-    // Newly assigned to an agent? wake them.
     if (
       input.assigneeRuntimeAgentId &&
       input.assigneeRuntimeAgentId !== existing.assigneeRuntimeAgentId &&
       result.status !== "backlog"
     ) {
-      void enqueueWakeup({
-        runtimeAgentId: input.assigneeRuntimeAgentId,
-        source: "assignment",
-        reason: "issue_assigned",
-        payload: { issueId: input.id, mutation: "assignment" },
-        contextSnapshot: { issueId: input.id, taskKey: `issue:${input.id}` },
+      void wakeOnAssignment({
         issueId: input.id,
-        requestedByActorType: "user",
-        requestedByActorId: "self",
+        assigneeRuntimeAgentId: input.assigneeRuntimeAgentId,
+        reason: "issue_assigned",
+        byActorType: "user",
+        byActorId: "self",
       }).catch((err) => {
         // eslint-disable-next-line no-console
         console.error("[issues.update] wake on assignment failed:", err)
@@ -365,7 +362,7 @@ export const issuesRouter = router({
         source: "on_demand",
         reason: "user_run_button",
         payload: { issueId: issue.id },
-        contextSnapshot: { issueId: issue.id, taskKey: `issue:${issue.id}` },
+        contextSnapshot: { issueId: issue.id, taskKey: issueTaskKey(issue.id) },
         issueId: issue.id,
         requestedByActorType: "user",
         requestedByActorId: "self",

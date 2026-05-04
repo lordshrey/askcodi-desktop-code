@@ -1,13 +1,13 @@
 import { z } from "zod"
-import { eq, desc, and } from "drizzle-orm"
+import { eq, desc, and, gt } from "drizzle-orm"
+import { observable } from "@trpc/server/observable"
 import { router, publicProcedure } from "../index"
-import { getDatabase, agentRuns, agentRunEvents } from "../../db"
+import { getDatabase, agentRuns, agentRunEvents, type AgentRunEvent } from "../../db"
 import { cancelRun } from "../../services/heartbeat"
+import { subscribeToRun } from "../../services/run-store"
+import { isTerminalRunStatus } from "../../../../shared/orchestrator/run-status"
 
-// tRPC router for agent run inspection. Read-only views + cancel.
-//
-// MVP scope: list, get, cancel. Live event subscription comes in Phase 7
-// (it needs WebSocket-like emitters that the run-store doesn't yet publish).
+// tRPC router for agent run inspection. Read-only views + cancel + live tail.
 
 export const agentRunsRouter = router({
   /**
@@ -62,13 +62,78 @@ export const agentRunsRouter = router({
     }),
 
   /**
-   * Cancel a queued or running run. Process termination (PGID kill) is Phase 7;
-   * for MVP, this just flips DB state and releases the issue lock.
+   * Cancel a queued or running run. Maps the cancel through to the SDK's
+   * abortSignal (via heartbeat.cancelRun), flushes the run-log handle, releases
+   * the issue lock, and emits a terminal notification so live-tail subscribers
+   * close.
    */
   cancel: publicProcedure
     .input(z.object({ id: z.string(), reason: z.string().optional() }))
     .mutation(async ({ input }) => {
       await cancelRun(input.id, input.reason)
       return { ok: true }
+    }),
+
+  /**
+   * Live event subscription for a run. Replays existing events from `sinceSeq`
+   * (default -1 = all) then streams new ones as they're persisted by run-store.
+   *
+   * Closes when the run reaches terminal status (succeeded/failed/cancelled/
+   * timed_out). The renderer's tRPC subscription hook receives each event via
+   * `onData` and the terminal close via `onComplete`.
+   */
+  subscribeEvents: publicProcedure
+    .input(
+      z.object({
+        runId: z.string(),
+        sinceSeq: z.number().int().optional(),
+        backfillLimit: z.number().int().min(1).max(5000).optional(),
+      }),
+    )
+    .subscription(({ input }) => {
+      return observable<AgentRunEvent | { type: "terminal"; status: string }>((emit) => {
+        const db = getDatabase()
+        const sinceSeq = input.sinceSeq ?? -1
+        const backfillLimit = input.backfillLimit ?? 2000
+
+        // Replay events the client missed. Predicate is pushed into SQL so a
+        // 100k-event run resuming from seq=99000 reads ~1k rows, not 100k.
+        try {
+          const backfill = db
+            .select()
+            .from(agentRunEvents)
+            .where(
+              and(eq(agentRunEvents.runId, input.runId), gt(agentRunEvents.seq, sinceSeq)),
+            )
+            .orderBy(agentRunEvents.seq)
+            .limit(backfillLimit)
+            .all()
+          for (const ev of backfill) emit.next(ev)
+        } catch (error) {
+          // eslint-disable-next-line no-console
+          console.error("[agent-runs.subscribeEvents] backfill failed:", error)
+        }
+
+        const unsubscribe = subscribeToRun(input.runId, {
+          onEvent: (ev) => {
+            if (ev.seq > sinceSeq) emit.next(ev)
+          },
+          onTerminal: ({ status }) => {
+            emit.next({ type: "terminal", status })
+            emit.complete()
+          },
+        })
+
+        // If the run is already terminal at subscribe time, close immediately
+        // after the backfill so the renderer doesn't wait for a notification
+        // that will never come.
+        const run = db.select().from(agentRuns).where(eq(agentRuns.id, input.runId)).get()
+        if (run && isTerminalRunStatus(run.status)) {
+          emit.next({ type: "terminal", status: run.status })
+          emit.complete()
+        }
+
+        return unsubscribe
+      })
     }),
 })

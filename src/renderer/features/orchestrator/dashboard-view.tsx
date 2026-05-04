@@ -3,7 +3,7 @@ import { cn } from "@/lib/utils"
 import { trpc } from "@/lib/trpc"
 import { useSetAtom } from "jotai"
 import { orchestratorRouteAtom } from "./atoms"
-import { formatTimeAgo } from "@/lib/utils/format-time-ago"
+import { timeAgo } from "./status-meta"
 
 function StatCard({
   label,
@@ -35,9 +35,6 @@ function StatCard({
 function formatCents(cents: number): string {
   return `$${(cents / 100).toFixed(2)}`
 }
-
-const timeAgo = (d: Date | string | null | undefined) =>
-  formatTimeAgo(d, { suffix: " ago", nullLabel: "—" })
 
 const RUN_STATUS_LABEL: Record<string, (finishedAt: Date | string | null | undefined) => string> = {
   running: () => "Running",

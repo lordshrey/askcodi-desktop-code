@@ -7,6 +7,7 @@ import {
   agentRuntimeState,
   runtimeAgents,
   issues,
+  projects,
   costEvents,
   type AgentRun,
   type NewAgentRun,
@@ -14,9 +15,10 @@ import {
   type NewCostEvent,
   type RuntimeAgent,
 } from "../db"
+import { buildProjectContextMarkdown } from "../agents/project-context"
 import { withAgentStartLock } from "./agent-start-lock"
 import { logActivity } from "./activity-log"
-import { appendRunLog, finalizeRunLog, openRunLog } from "./run-store"
+import { appendRunLog, finalizeRunLog, openRunLog, emitRunTerminal } from "./run-store"
 import { tryGet as tryGetAdapter } from "../adapters/registry"
 import { getIssue, releaseIssueExecutionLock } from "./issues"
 import type {
@@ -501,6 +503,10 @@ async function persistFinalResult(
   if (run.issueId) {
     await releaseIssueExecutionLock(run.issueId, run.id)
   }
+
+  // Notify live tail subscribers that the run has reached terminal state so
+  // they can close their stream cleanly.
+  emitRunTerminal(run.id, result.status)
 }
 
 /**
@@ -578,6 +584,25 @@ export async function executeRun(runId: string): Promise<void> {
     taskKey,
   )
 
+  // Resolve project for cwd + context. Issue's project wins; otherwise the agent's
+  // default project (which is set on founding-engineer hire).
+  const projectId = issue?.projectId ?? agent.defaultProjectId ?? null
+  const project = projectId
+    ? db.select().from(projects).where(eq(projects.id, projectId)).get() ?? null
+    : null
+  const cwd = issue?.worktreePath ?? project?.path ?? process.cwd()
+
+  // Project context (README, scripts, file tree). Only built when we have a real
+  // project path — skipped in tests / sandbox runs where cwd is process.cwd().
+  let projectContextMd: string | null = null
+  if (project?.path) {
+    try {
+      projectContextMd = await buildProjectContextMarkdown(project.path)
+    } catch {
+      projectContextMd = null
+    }
+  }
+
   const abortController = new AbortController()
 
   const ctx: AdapterExecutionContext = {
@@ -598,11 +623,17 @@ export async function executeRun(runId: string): Promise<void> {
             identifier: issue.identifier,
           }
         : undefined,
-      project: undefined,  // populated in Phase 4 when project context resolution lands
+      project: project
+        ? { id: project.id, name: project.name, path: project.path }
+        : undefined,
+      // First-run agents need orientation; we splice the project context into the
+      // continuationSummary slot so the existing prompt builder picks it up without
+      // a schema change.
+      continuationSummary: projectContextMd,
     },
     executionTarget: {
-      cwd: issue?.worktreePath ?? process.cwd(),
-      projectId: issue?.projectId,
+      cwd,
+      projectId: projectId ?? undefined,
       branch: issue?.branch ?? null,
       baseBranch: issue?.baseBranch ?? null,
     },
@@ -626,7 +657,10 @@ export async function executeRun(runId: string): Promise<void> {
         .where(eq(agentRuns.id, run.id))
         .run()
     },
-    authToken: null,  // wired in Phase 6 (MCP server)
+    // The orchestrator MCP server is wired in-process by the adapter (closure-bound
+    // auth) so we don't pass a token here. If a future adapter needs HTTP MCP, this
+    // is where a per-run JWT would land.
+    authToken: null,
     abortSignal: abortController.signal,
   }
 
@@ -697,6 +731,7 @@ export async function cancelRun(runId: string, reason = "Cancelled by user"): Pr
   if (run.issueId) {
     await releaseIssueExecutionLock(run.issueId, run.id)
   }
+  emitRunTerminal(runId, "cancelled")
   await logActivity({
     actorType: "user",
     actorId: "self",
