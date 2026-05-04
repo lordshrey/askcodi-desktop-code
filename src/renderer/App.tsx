@@ -11,6 +11,7 @@ import { AgentsLayout } from "./features/layout/agents-layout"
 import { OnboardingWizard } from "./features/onboarding-v2"
 import { OrchestratorLayout, appModeAtom } from "./features/orchestrator"
 import { ChatToOrchestratorToggle } from "./features/orchestrator/mode-toggle"
+import { GlobalChatChrome } from "./components/global-chat-chrome"
 import { identify, initAnalytics, shutdown } from "./lib/analytics"
 import { appStore } from "./lib/jotai-store"
 import { VSCodeThemeProvider } from "./lib/themes/theme-provider"
@@ -156,6 +157,7 @@ export function App() {
                   data-agents-page
                   className="h-screen w-screen bg-background text-foreground overflow-hidden"
                 >
+                  <GlobalChatChrome />
                   <AppContent />
                 </div>
                 <ThemedToaster />

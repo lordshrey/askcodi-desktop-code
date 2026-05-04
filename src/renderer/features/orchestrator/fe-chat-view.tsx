@@ -4,32 +4,22 @@ import { Plus, MessageSquare, Archive, ExternalLink } from "lucide-react"
 import { trpc } from "@/lib/trpc"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
-import {
-  selectedProjectAtom,
-  selectedAgentChatIdAtom,
-} from "@/features/agents/atoms"
-import { appModeAtom } from "./atoms"
+import { selectedProjectAtom } from "@/features/agents/atoms"
+import { orchestratorChatIdAtom } from "./atoms"
 import { timeAgo } from "./status-meta"
 import { toast } from "sonner"
 
 /**
  * Founding Engineer chat tab.
  *
- * UX:
- * - Multi-thread (Slack-DM style). Each thread is a `chats` row with kind="fe_thread".
- * - "Open" button on a thread switches the app to chat mode with that thread
- *   loaded. The full chat UI (composer, streaming, sub-chats) comes for free.
- * - "Back to orchestrator" toggle in the chat sidebar returns the user.
- *
- * Why we don't embed the chat UI here: ActiveChat is a deep integration with
- * its own sidebar, sub-chat tabs, file viewer, etc. Embedding it would either
- * fork the surface or pull in chat-mode-specific state. The dual-mode toggle
- * already works; we lean on it.
+ * Multi-thread (Slack-DM style). Each thread is a `chats` row with
+ * kind="fe_thread". Selecting a thread sets orchestratorChatIdAtom; the
+ * OrchestratorLayout's main pane swaps to <OrchestratorChatHost> over the
+ * route view. No appMode swap — user stays in the orchestrator.
  */
 export function FeChatView() {
   const project = useAtomValue(selectedProjectAtom)
-  const setAppMode = useSetAtom(appModeAtom)
-  const setSelectedChatId = useSetAtom(selectedAgentChatIdAtom)
+  const setOrchestratorChatId = useSetAtom(orchestratorChatIdAtom)
   const utils = trpc.useUtils()
   const [creating, setCreating] = useState(false)
   const [draftTitle, setDraftTitle] = useState("")
@@ -44,9 +34,7 @@ export function FeChatView() {
       void utils.feThreads.list.invalidate()
       setCreating(false)
       setDraftTitle("")
-      // Open immediately
-      setSelectedChatId(thread.id)
-      setAppMode("chat")
+      setOrchestratorChatId(thread.id)
     },
     onError: (err) => toast.error(err.message),
   })
@@ -64,8 +52,7 @@ export function FeChatView() {
   }
 
   function openThread(id: string) {
-    setSelectedChatId(id)
-    setAppMode("chat")
+    setOrchestratorChatId(id)
   }
 
   return (

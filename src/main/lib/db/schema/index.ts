@@ -62,7 +62,7 @@ export const chats = sqliteTable("chats", {
   pluginId: text("plugin_id"),            // Plugin source identifier, e.g. "official:stripe-dev"
   // Chat kind. "solo" = traditional 1:1 user↔Claude chat (default; backwards-compat).
   // "fe_thread" = thread inside the orchestrator FE chat tab; the FE answers.
-  kind: text("kind").notNull().default("solo"), // "solo" | "fe_thread"
+  kind: text("kind").notNull().default("solo"), // ChatKind
 }, (table) => [
   index("chats_worktree_path_idx").on(table.worktreePath),
   index("chats_source_url_idx").on(table.sourceUrl),
@@ -76,6 +76,12 @@ export const chatsRelations = relations(chats, ({ one, many }) => ({
   }),
   subChats: many(subChats),
 }))
+
+export const CHAT_KIND = {
+  SOLO: "solo",
+  FE_THREAD: "fe_thread",
+} as const
+export type ChatKind = (typeof CHAT_KIND)[keyof typeof CHAT_KIND]
 
 // ============ SUB-CHATS ============
 export const subChats = sqliteTable("sub_chats", {

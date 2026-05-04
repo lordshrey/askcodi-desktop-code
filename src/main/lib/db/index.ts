@@ -5,6 +5,7 @@ import { app } from "electron"
 import { join } from "path"
 import { existsSync, mkdirSync } from "fs"
 import * as schema from "./schema"
+import { backfillFeThreads } from "./backfill"
 
 let db: ReturnType<typeof drizzle<typeof schema>> | null = null
 let sqlite: Database.Database | null = null
@@ -66,6 +67,12 @@ export function initDatabase() {
   } catch (error) {
     console.error("[DB] Migration error:", error)
     throw error
+  }
+
+  try {
+    backfillFeThreads(db)
+  } catch (error) {
+    console.error("[DB] FE-thread backfill error:", error)
   }
 
   return db

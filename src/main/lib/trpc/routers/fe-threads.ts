@@ -1,13 +1,13 @@
 import { z } from "zod"
 import { eq, and, desc, isNull } from "drizzle-orm"
 import { router, publicProcedure } from "../index"
-import { getDatabase, chats, runtimeAgents } from "../../db"
+import { CHAT_KIND, chats, getDatabase, projects, runtimeAgents, subChats } from "../../db"
 import { logActivity } from "../../services/activity-log"
 
 // tRPC router for the Founding Engineer chat tab.
-// FE threads are stored as `chats` rows with `kind = "fe_thread"`. This lets
-// us reuse the entire existing chat pipeline (sub_chats, claude SDK, message
-// streaming) without forking the surface.
+// FE threads are stored as `chats` rows with kind=CHAT_KIND.FE_THREAD. This
+// lets us reuse the entire existing chat pipeline (sub_chats, claude SDK,
+// message streaming) without forking the surface.
 
 export const feThreadsRouter = router({
   /**
@@ -23,7 +23,7 @@ export const feThreadsRouter = router({
         .where(
           and(
             eq(chats.projectId, input.projectId),
-            eq(chats.kind, "fe_thread"),
+            eq(chats.kind, CHAT_KIND.FE_THREAD),
             isNull(chats.archivedAt),
           ),
         )
@@ -35,6 +35,12 @@ export const feThreadsRouter = router({
   /**
    * Create a new FE thread. Returns the chat row so the renderer can mount
    * the existing ActiveChat component against it.
+   *
+   * Mirrors the Solo `chats.create` shape just enough that ChatView can render:
+   *  - one initial sub-chat (mode="agent", no initial messages)
+   *  - worktreePath = project.path (FE conversations are about the project,
+   *    not isolated edits — the FE delegates to issues which get their own
+   *    per-agent worktrees)
    */
   create: publicProcedure
     .input(z.object({ projectId: z.string(), title: z.string().min(1).max(200).optional() }))
@@ -55,16 +61,31 @@ export const feThreadsRouter = router({
         .get()
       if (!fe) throw new Error("Founding engineer not hired for this project yet")
 
-      const inserted = db
+      const project = db
+        .select()
+        .from(projects)
+        .where(eq(projects.id, input.projectId))
+        .get()
+      if (!project) throw new Error("Project not found")
+
+      const created = db
         .insert(chats)
         .values({
           projectId: input.projectId,
           name: input.title ?? "New thread",
-          kind: "fe_thread",
+          kind: CHAT_KIND.FE_THREAD,
+          worktreePath: project.path,
         })
         .returning()
-        .all()
-      const created = inserted[0]!
+        .get()
+
+      db.insert(subChats)
+        .values({
+          chatId: created.id,
+          mode: "agent",
+          messages: "[]",
+        })
+        .run()
 
       await logActivity({
         actorType: "user",
@@ -88,7 +109,7 @@ export const feThreadsRouter = router({
       const updated = db
         .update(chats)
         .set({ name: input.title, updatedAt: new Date() })
-        .where(and(eq(chats.id, input.id), eq(chats.kind, "fe_thread")))
+        .where(and(eq(chats.id, input.id), eq(chats.kind, CHAT_KIND.FE_THREAD)))
         .returning()
         .all()
       return updated[0] ?? null
@@ -104,7 +125,7 @@ export const feThreadsRouter = router({
       db
         .update(chats)
         .set({ archivedAt: new Date(), updatedAt: new Date() })
-        .where(and(eq(chats.id, input.id), eq(chats.kind, "fe_thread")))
+        .where(and(eq(chats.id, input.id), eq(chats.kind, CHAT_KIND.FE_THREAD)))
         .run()
       await logActivity({
         actorType: "user",

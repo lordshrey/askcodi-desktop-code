@@ -10,7 +10,8 @@ import { AgentsView } from "./agents-view"
 import { ActivityView } from "./activity-view"
 import { ReposView } from "./repos-view"
 import { IssueDetailView } from "./issue-detail-view"
-import { orchestratorRouteAtom, selectedIssueIdAtom } from "./atoms"
+import { OrchestratorChatHost } from "./orchestrator-chat-host"
+import { orchestratorRouteAtom, selectedIssueIdAtom, orchestratorChatIdAtom } from "./atoms"
 import { useEnsureFoundingEngineer } from "./use-ensure-founding-engineer"
 
 /**
@@ -18,26 +19,23 @@ import { useEnsureFoundingEngineer } from "./use-ensure-founding-engineer"
  * Mounted as a parallel app mode alongside the existing Solo chat UI.
  *
  * Mode toggle:
- *   appModeAtom = "chat"          → existing AgentsLayout (Solo mode escape hatch)
+ *   appModeAtom = "chat"          → existing AgentsLayout (Solo escape hatch)
  *   appModeAtom = "orchestrator"  → this layout (default for paperclip-style work)
  *
- * Routes:
- *   board       → kanban of all issues across all agents (default home)
- *   fe_chat     → multi-thread chat with the Founding Engineer
- *   agent       → per-agent filtered board (uses selectedRuntimeAgentIdAtom)
- *   inbox       → critical agent requests escalated by the FE
- *   dashboard   → metrics tile view (demoted from home)
- *   issues      → flat all-issues list (legacy table view)
- *   agents      → manage hired agents (status, hire, terminate)
- *   activity    → activity log
- *   repos       → repo manager (multi-repo per project)
+ * Main pane precedence (highest first):
+ *   1. selectedIssueId set        → IssueDetailView
+ *   2. orchestratorChatId set     → OrchestratorChatHost (embedded ChatView)
+ *   3. otherwise                  → route view
  *
- * Issue detail takes precedence over the route when an issue is selected — it
- * opens as a chat-first surface that overlays the main pane.
+ * orchestratorChatId is transient: only set when the user explicitly opens a
+ * thread/task. Cleared on Back or sidebar navigation.
+ *
+ * Routes: board, fe_chat, agent, inbox, dashboard, issues, agents, activity, repos.
  */
 export function OrchestratorLayout() {
   const route = useAtomValue(orchestratorRouteAtom)
   const selectedIssueId = useAtomValue(selectedIssueIdAtom)
+  const orchestratorChatId = useAtomValue(orchestratorChatIdAtom)
   // Auto-hires the Founding Engineer on first project load. Idempotent.
   useEnsureFoundingEngineer()
 
@@ -47,6 +45,8 @@ export function OrchestratorLayout() {
       <main className="flex-1 overflow-hidden">
         {selectedIssueId ? (
           <IssueDetailView issueId={selectedIssueId} />
+        ) : orchestratorChatId ? (
+          <OrchestratorChatHost />
         ) : (
           <>
             {route === "board" && <BoardView />}

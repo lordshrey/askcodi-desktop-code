@@ -18,6 +18,7 @@ import {
   appModeAtom,
   orchestratorRouteAtom,
   selectedRuntimeAgentIdAtom,
+  orchestratorChatIdAtom,
   type OrchestratorRoute,
 } from "./atoms"
 import { trpc, type RouterOutputs } from "@/lib/trpc"
@@ -86,7 +87,15 @@ export function OrchestratorSidebar() {
   const [route, setRoute] = useAtom(orchestratorRouteAtom)
   const setAppMode = useSetAtom(appModeAtom)
   const [selectedAgentId, setSelectedAgentId] = useAtom(selectedRuntimeAgentIdAtom)
+  const setOrchestratorChatId = useSetAtom(orchestratorChatIdAtom)
   const project = useAtomValue(selectedProjectAtom)
+
+  // Navigating to any orchestrator route closes the embedded chat overlay.
+  function navigate(next: OrchestratorRoute) {
+    setSelectedAgentId(null)
+    setOrchestratorChatId(null)
+    setRoute(next)
+  }
 
   const { data: agents = [] } = trpc.runtimeAgents.list.useQuery(undefined, {
     refetchInterval: 5000,
@@ -110,6 +119,7 @@ export function OrchestratorSidebar() {
 
   function selectAgent(id: string) {
     setSelectedAgentId(id)
+    setOrchestratorChatId(null)
     setRoute("agent")
   }
 
@@ -127,7 +137,10 @@ export function OrchestratorSidebar() {
           variant="ghost"
           size="sm"
           className="h-7 px-2 text-xs"
-          onClick={() => setAppMode("chat")}
+          onClick={() => {
+            setOrchestratorChatId(null)
+            setAppMode("chat")
+          }}
           title="Switch to Solo chat mode"
         >
           <ArrowLeftRight className="mr-1 h-3 w-3" />
@@ -142,10 +155,7 @@ export function OrchestratorSidebar() {
             key={item.route}
             {...item}
             active={route === item.route}
-            onClick={() => {
-              setSelectedAgentId(null)
-              setRoute(item.route)
-            }}
+            onClick={() => navigate(item.route)}
           />
         ))}
 
@@ -155,10 +165,7 @@ export function OrchestratorSidebar() {
           Icon={Inbox}
           active={route === "inbox"}
           badge={inboxCount}
-          onClick={() => {
-            setSelectedAgentId(null)
-            setRoute("inbox")
-          }}
+          onClick={() => navigate("inbox")}
         />
 
         {teamAgents.length > 0 && <SectionHeading>Team</SectionHeading>}
@@ -175,10 +182,7 @@ export function OrchestratorSidebar() {
           variant="ghost"
           size="sm"
           className="mt-1 w-full justify-start gap-2 text-muted-foreground"
-          onClick={() => {
-            setSelectedAgentId(null)
-            setRoute("agents")
-          }}
+          onClick={() => navigate("agents")}
         >
           <Plus className="h-3.5 w-3.5" />
           Hire / manage
@@ -190,10 +194,7 @@ export function OrchestratorSidebar() {
             key={item.route}
             {...item}
             active={route === item.route}
-            onClick={() => {
-              setSelectedAgentId(null)
-              setRoute(item.route)
-            }}
+            onClick={() => navigate(item.route)}
           />
         ))}
       </div>
@@ -208,10 +209,7 @@ export function OrchestratorSidebar() {
                 {" · "}
                 <button
                   type="button"
-                  onClick={() => {
-                    setSelectedAgentId(null)
-                    setRoute("repos")
-                  }}
+                  onClick={() => navigate("repos")}
                   className="hover:text-foreground hover:underline"
                   title="Manage repos"
                 >

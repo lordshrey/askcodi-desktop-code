@@ -11,21 +11,13 @@ import {
   agentsSettingsDialogOpenAtom,
   apiKeyOnboardingCompletedAtom,
   billingMethodAtom,
-  claudeLoginModalConfigAtom,
   codexOnboardingCompletedAtom,
   isDesktopAtom,
   isFullscreenAtom,
   anthropicOnboardingCompletedAtom,
-  customHotkeysAtom,
-  betaKanbanEnabledAtom,
 } from "../../lib/atoms"
-import { selectedAgentChatIdAtom, selectedProjectAtom, selectedDraftIdAtom, showNewChatFormAtom, desktopViewAtom, fileSearchDialogOpenAtom } from "../agents/atoms"
+import { selectedAgentChatIdAtom, selectedProjectAtom, desktopViewAtom } from "../agents/atoms"
 import { trpc } from "../../lib/trpc"
-import { useAgentsHotkeys } from "../agents/lib/agents-hotkeys-manager"
-import { toggleSearchAtom } from "../agents/search"
-import { ClaudeLoginModal } from "../../components/dialogs/claude-login-modal"
-import { AskCodiLoginModal } from "../../components/dialogs/askcodi-login-modal"
-import { CodexLoginModal } from "../../components/dialogs/codex-login-modal"
 import { TooltipProvider } from "../../components/ui/tooltip"
 import { ResizableSidebar } from "../../components/ui/resizable-sidebar"
 import { AgentsSidebar } from "../sidebar/agents-sidebar"
@@ -34,7 +26,6 @@ import { UpdateBanner } from "../../components/update-banner"
 import { WindowsTitleBar } from "../../components/windows-title-bar"
 import { useUpdateChecker } from "../../lib/hooks/use-update-checker"
 import { useAgentSubChatStore } from "../agents/stores/sub-chat-store"
-import { QueueProcessor } from "../agents/components/queue-processor"
 import { SettingsSidebar } from "../settings/settings-sidebar"
 
 // ============================================================================
@@ -97,20 +88,14 @@ export function AgentsLayout() {
   const setSettingsActiveTab = useSetAtom(agentsSettingsDialogActiveTabAtom)
   const setSettingsDialogOpen = useSetAtom(agentsSettingsDialogOpenAtom)
   const desktopView = useAtomValue(desktopViewAtom)
-  const setFileSearchDialogOpen = useSetAtom(fileSearchDialogOpenAtom)
   const [selectedChatId, setSelectedChatId] = useAtom(selectedAgentChatIdAtom)
   const [selectedProject, setSelectedProject] = useAtom(selectedProjectAtom)
-  const setSelectedDraftId = useSetAtom(selectedDraftIdAtom)
-  const setShowNewChatForm = useSetAtom(showNewChatFormAtom)
-  const betaKanbanEnabled = useAtomValue(betaKanbanEnabledAtom)
-  const setDesktopView = useSetAtom(desktopViewAtom)
   const setAnthropicOnboardingCompleted = useSetAtom(
     anthropicOnboardingCompletedAtom
   )
   const setApiKeyOnboardingCompleted = useSetAtom(apiKeyOnboardingCompletedAtom)
   const setCodexOnboardingCompleted = useSetAtom(codexOnboardingCompletedAtom)
   const setBillingMethod = useSetAtom(billingMethodAtom)
-  const claudeLoginModalConfig = useAtomValue(claudeLoginModalConfigAtom)
 
   // Fetch projects to validate selectedProject exists
   const { data: projects, isLoading: isLoadingProjects } =
@@ -268,26 +253,9 @@ export function AgentsLayout() {
     }
   }, [selectedChatId, setChatId])
 
-  // Chat search toggle
-  const toggleChatSearch = useSetAtom(toggleSearchAtom)
-
-  // Custom hotkeys config
-  const customHotkeysConfig = useAtomValue(customHotkeysAtom)
-
-  // Initialize hotkeys manager
-  useAgentsHotkeys({
-    setSelectedChatId,
-    setSelectedDraftId,
-    setShowNewChatForm,
-    setDesktopView,
-    setSidebarOpen,
-    setSettingsActiveTab,
-    setFileSearchDialogOpen,
-    toggleChatSearch,
-    selectedChatId,
-    customHotkeysConfig,
-    betaKanbanEnabled,
-  })
+  // QueueProcessor, login modals, and useAgentsHotkeys are mounted globally in
+  // <GlobalChatChrome /> (App.tsx) so they also serve the embedded ChatView in
+  // OrchestratorLayout, not just this AgentsLayout.
 
   const handleCloseSidebar = useCallback(() => {
     setSidebarOpen(false)
@@ -295,16 +263,6 @@ export function AgentsLayout() {
 
   return (
     <TooltipProvider delayDuration={300}>
-      {/* Global queue processor - handles message queues for all sub-chats */}
-      <QueueProcessor />
-      <ClaudeLoginModal
-        hideCustomModelSettingsLink={
-          claudeLoginModalConfig.hideCustomModelSettingsLink
-        }
-        autoStartAuth={claudeLoginModalConfig.autoStartAuth}
-      />
-      <CodexLoginModal />
-      <AskCodiLoginModal />
       <div className="flex flex-col w-full h-full relative overflow-hidden bg-background select-none">
         {/* Windows Title Bar (only shown on Windows with frameless window) */}
         <WindowsTitleBar />

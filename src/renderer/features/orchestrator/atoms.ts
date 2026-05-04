@@ -22,3 +22,11 @@ export const orchestratorRouteAtom = atom<OrchestratorRoute>("board")
 
 export const selectedIssueIdAtom = atom<string | null>(null)
 export const selectedRuntimeAgentIdAtom = atom<string | null>(null)
+
+// Chat focused inside the orchestrator main pane. Transient — never persisted.
+// Set when the user explicitly opens a thread/task from inside orchestrator;
+// cleared on Back, on sidebar route navigation, or on app launch. Distinct
+// from selectedAgentChatIdAtom (which is per-window-persisted and drives the
+// Solo chat layout) so that a stale persisted chat doesn't silently take
+// over orchestrator routes like Board / Dashboard.
+export const orchestratorChatIdAtom = atom<string | null>(null)
