@@ -40,6 +40,14 @@ export const RUN_STATUS_DOT: Record<string, string> = {
   scheduled_retry: "bg-blue-400",
 }
 
+export const AGENT_STATUS_DOT: Record<string, string> = {
+  idle: "bg-muted-foreground/40",
+  running: "bg-emerald-500 animate-pulse",
+  paused: "bg-amber-400",
+  terminated: "bg-red-500/60",
+  pending_approval: "bg-blue-400",
+}
+
 /** Standardized "5m ago" formatter with em-dash for null. */
 export function timeAgo(d: Date | string | null | undefined): string {
   return formatTimeAgo(d, { suffix: " ago", nullLabel: "—" })

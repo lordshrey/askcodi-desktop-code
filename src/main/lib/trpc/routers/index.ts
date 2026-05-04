@@ -22,8 +22,12 @@ import { pluginsRouter } from "./plugins"
 import { integrationsRouter } from "./integrations"
 import { externalTasksRouter } from "./external-tasks"
 import { runtimeAgentsRouter } from "./runtime-agents"
+import { projectReposRouter } from "./project-repos"
+import { feThreadsRouter } from "./fe-threads"
 import { issuesRouter } from "./issues"
 import { agentRunsRouter } from "./agent-runs"
+import { agentRequestsRouter } from "./agent-requests"
+import { agentWorktreesRouter } from "./agent-worktrees"
 import { activityRouter } from "./activity"
 import { createGitRouter } from "../../git"
 import { BrowserWindow } from "electron"
@@ -58,8 +62,12 @@ export function createAppRouter(getWindow: () => BrowserWindow | null) {
     externalTasks: externalTasksRouter,
     // Orchestrator surface (paperclip-style)
     runtimeAgents: runtimeAgentsRouter,
+    projectRepos: projectReposRouter,
+    feThreads: feThreadsRouter,
     issues: issuesRouter,
     agentRuns: agentRunsRouter,
+    agentRequests: agentRequestsRouter,
+    agentWorktrees: agentWorktreesRouter,
     activity: activityRouter,
     // Git operations - named "changes" to match Superset API
     changes: createGitRouter(),

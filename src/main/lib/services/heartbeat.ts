@@ -1,10 +1,11 @@
-import { eq, and, asc, sql } from "drizzle-orm"
+import { eq, and, asc, sql, inArray } from "drizzle-orm"
 import {
   getDatabase,
   agentRuns,
   agentWakeupRequests,
   agentTaskSessions,
   agentRuntimeState,
+  agentRequests,
   runtimeAgents,
   issues,
   projects,
@@ -603,6 +604,35 @@ export async function executeRun(runId: string): Promise<void> {
     }
   }
 
+  // FE wakeups carry a snapshot of unanswered team requests so the FE can
+  // address them this run. Scoped to the FE's own project (`runtime_agents.
+  // default_project_id`) — without this filter, an FE in project A would see
+  // requests from project B's agents.
+  if (agent.isFounding && agent.defaultProjectId) {
+    const pending = db
+      .select({ req: agentRequests })
+      .from(agentRequests)
+      .innerJoin(runtimeAgents, eq(runtimeAgents.id, agentRequests.fromAgentId))
+      .where(
+        and(
+          eq(agentRequests.addressedTo, "founding_engineer"),
+          eq(agentRequests.status, "pending"),
+          eq(runtimeAgents.defaultProjectId, agent.defaultProjectId),
+        ),
+      )
+      .limit(20)
+      .all()
+    if (pending.length > 0) {
+      const requestLines = pending.map(({ req: r }) =>
+        `- [${r.severity}] (id=${r.id}) from agent ${r.fromAgentId}${
+          r.issueId ? ` on issue ${r.issueId}` : ""
+        }: ${r.body}`,
+      )
+      const block = ["## Pending requests from your team", ...requestLines].join("\n")
+      projectContextMd = projectContextMd ? `${projectContextMd}\n\n${block}` : block
+    }
+  }
+
   const abortController = new AbortController()
 
   const ctx: AdapterExecutionContext = {
@@ -731,6 +761,18 @@ export async function cancelRun(runId: string, reason = "Cancelled by user"): Pr
   if (run.issueId) {
     await releaseIssueExecutionLock(run.issueId, run.id)
   }
+  // Mark any pending agent_requests from this run as abandoned — the asking
+  // agent is gone, the human shouldn't see stale entries in their inbox.
+  db
+    .update(agentRequests)
+    .set({ status: "abandoned", updatedAt: new Date() })
+    .where(
+      and(
+        eq(agentRequests.runId, runId),
+        inArray(agentRequests.status, ["pending", "human_review"]),
+      ),
+    )
+    .run()
   emitRunTerminal(runId, "cancelled")
   await logActivity({
     actorType: "user",

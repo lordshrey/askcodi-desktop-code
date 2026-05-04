@@ -8,6 +8,7 @@ import {
   issueDocuments,
   issueWorkProducts,
   agentRuntimeState,
+  agentRequests,
   type NewIssueComment,
   type NewIssueDocument,
   type NewIssueWorkProduct,
@@ -587,6 +588,141 @@ async function runIssueHandler(args: { issueId: string; reason?: string }, auth:
 }
 
 // ===========================================================================
+// Tool: askFoundingEngineer (agent → FE escalation protocol)
+// ===========================================================================
+
+const askFoundingEngineerInputSchema = {
+  body: z.string().min(1).describe("The question, request, or context the FE should answer."),
+  severity: z
+    .enum(["info", "decision", "critical"])
+    .default("decision")
+    .describe(
+      "info = FYI, no answer needed. decision = FE answers (default). critical = goes to human inbox.",
+    ),
+  kind: z.string().optional().describe("Optional tag, e.g. scope_question | approval_request | design_choice"),
+  issueId: z.string().optional().describe("Issue this question relates to. Defaults to the current issue if running one."),
+  context: z
+    .record(z.unknown())
+    .optional()
+    .describe("Optional structured context — file paths, options enumerated, diff hunks."),
+}
+
+async function askFoundingEngineerHandler(
+  args: {
+    body: string
+    severity?: "info" | "decision" | "critical"
+    kind?: string
+    issueId?: string
+    context?: Record<string, unknown>
+  },
+  auth: AuthContext,
+) {
+  const db = getDatabase()
+  const severity = args.severity ?? "decision"
+  // info goes to wherever we record audit trails, not to a human. decision goes
+  // to the FE. critical goes to the human inbox.
+  const addressedTo = severity === "critical" ? "human" : "founding_engineer"
+
+  const inserted = db
+    .insert(agentRequests)
+    .values({
+      fromAgentId: auth.callingAgentId,
+      runId: auth.runId,
+      issueId: args.issueId ?? null,
+      addressedTo,
+      severity,
+      kind: args.kind ?? null,
+      body: args.body,
+      context: args.context ?? {},
+      status: severity === "critical" ? "human_review" : "pending",
+    })
+    .returning()
+    .all()
+  const created = inserted[0]!
+
+  await logActivity({
+    actorType: "agent",
+    actorId: auth.callingAgentId,
+    action: "agent_request.created",
+    entityType: "agent_request",
+    entityId: created.id,
+    runtimeAgentId: auth.callingAgentId,
+    details: { severity, addressedTo, issueId: args.issueId, kind: args.kind },
+  })
+
+  // For decision-severity routed to the FE, wake the FE so they answer promptly.
+  if (severity !== "info" && addressedTo === "founding_engineer") {
+    const callingAgent = await requireCallingAgent(auth)
+    if (callingAgent.defaultProjectId) {
+      const fe = db
+        .select()
+        .from(runtimeAgents)
+        .where(
+          and(
+            eq(runtimeAgents.defaultProjectId, callingAgent.defaultProjectId),
+            eq(runtimeAgents.isFounding, true),
+          ),
+        )
+        .get()
+      if (fe && fe.id !== auth.callingAgentId) {
+        void enqueueWakeup({
+          runtimeAgentId: fe.id,
+          source: "on_demand",
+          reason: "agent_request_pending",
+          payload: { agentRequestId: created.id, fromAgentId: auth.callingAgentId },
+          contextSnapshot: { agentRequestId: created.id },
+          issueId: args.issueId ?? null,
+          requestedByActorType: "agent",
+          requestedByActorId: auth.callingAgentId,
+        }).catch((e) => {
+          // eslint-disable-next-line no-console
+          console.error("[askFoundingEngineer] wake FE failed:", e)
+        })
+      }
+    }
+  }
+
+  return ok({
+    requestId: created.id,
+    status: created.status,
+    addressedTo,
+    severity,
+    note:
+      severity === "critical"
+        ? "Routed to the human inbox for review."
+        : severity === "info"
+          ? "Recorded for audit. No answer expected."
+          : "Routed to the founding engineer. Check getMyRequests later for the answer.",
+  })
+}
+
+// ===========================================================================
+// Tool: getMyRequests (poll for answers to questions you raised)
+// ===========================================================================
+
+const getMyRequestsInputSchema = {
+  status: z.enum(["pending", "human_review", "resolved", "abandoned"]).optional(),
+  limit: z.number().int().min(1).max(50).default(20),
+}
+
+async function getMyRequestsHandler(
+  args: { status?: string; limit?: number },
+  auth: AuthContext,
+) {
+  const db = getDatabase()
+  const conditions = [eq(agentRequests.fromAgentId, auth.callingAgentId)]
+  if (args.status) conditions.push(eq(agentRequests.status, args.status))
+  const rows = db
+    .select()
+    .from(agentRequests)
+    .where(and(...conditions))
+    .orderBy(desc(agentRequests.createdAt))
+    .limit(args.limit ?? 20)
+    .all()
+  return ok({ requests: rows })
+}
+
+// ===========================================================================
 // Server factory
 // ===========================================================================
 
@@ -659,6 +795,18 @@ export async function createOrchestratorMcpServer(auth: AuthContext) {
         "Wake the assignee of an issue immediately (instead of waiting for an event). Use this after creating + assigning an issue to a teammate to kick them off right away.",
         runIssueInputSchema,
         (args) => runIssueHandler(args, auth),
+      ),
+      tool(
+        "askFoundingEngineer",
+        "Ask the founding engineer a question, request approval, or surface a blocker. severity='decision' (default) routes to the FE for an answer; severity='critical' goes to the human inbox. Use this instead of guessing when you hit ambiguity.",
+        askFoundingEngineerInputSchema,
+        (args) => askFoundingEngineerHandler(args, auth),
+      ),
+      tool(
+        "getMyRequests",
+        "Poll for answers on questions you've previously asked. Pass status='resolved' to find ones the FE has answered.",
+        getMyRequestsInputSchema,
+        (args) => getMyRequestsHandler(args, auth),
       ),
     ],
   })

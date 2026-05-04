@@ -8,12 +8,17 @@ export type AppMode = "chat" | "orchestrator"
 export const appModeAtom = atomWithStorage<AppMode>("askcodi.appMode", "chat")
 
 export type OrchestratorRoute =
+  | "board"
+  | "fe_chat"
+  | "agent"
+  | "inbox"
   | "dashboard"
   | "issues"
   | "agents"
   | "activity"
+  | "repos"
 
-export const orchestratorRouteAtom = atom<OrchestratorRoute>("dashboard")
+export const orchestratorRouteAtom = atom<OrchestratorRoute>("board")
 
 export const selectedIssueIdAtom = atom<string | null>(null)
 export const selectedRuntimeAgentIdAtom = atom<string | null>(null)

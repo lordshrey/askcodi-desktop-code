@@ -60,9 +60,13 @@ export const chats = sqliteTable("chats", {
   sourceIdentifier: text("source_identifier"), // "#42" or "ENG-123"
   // Plugin mode (scopes agent to a specific plugin's capabilities)
   pluginId: text("plugin_id"),            // Plugin source identifier, e.g. "official:stripe-dev"
+  // Chat kind. "solo" = traditional 1:1 user↔Claude chat (default; backwards-compat).
+  // "fe_thread" = thread inside the orchestrator FE chat tab; the FE answers.
+  kind: text("kind").notNull().default("solo"), // "solo" | "fe_thread"
 }, (table) => [
   index("chats_worktree_path_idx").on(table.worktreePath),
   index("chats_source_url_idx").on(table.sourceUrl),
+  index("chats_kind_idx").on(table.kind),
 ])
 
 export const chatsRelations = relations(chats, ({ one, many }) => ({
@@ -176,7 +180,10 @@ export type NewIntegration = typeof integrations.$inferInsert
 // ============ ORCHESTRATOR TABLES (paperclip-style) ============
 // Tables added for the agent orchestrator. Each lives in its own file for clarity.
 // Re-exported here so existing import paths (`from "../db"` / `from "./schema"`) keep working.
+export * from "./project-repos"
 export * from "./runtime-agents"
+export * from "./agent-worktrees"
+export * from "./agent-requests"
 export * from "./issues"
 export * from "./issue-relations"
 export * from "./issue-comments"

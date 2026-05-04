@@ -99,6 +99,20 @@
       "when": 1777840165938,
       "tag": "0013_solid_stryfe",
       "breakpoints": true
+    },
+    {
+      "idx": 14,
+      "version": "6",
+      "when": 1777883949406,
+      "tag": "0014_careless_tigra",
+      "breakpoints": true
+    },
+    {
+      "idx": 15,
+      "version": "6",
+      "when": 1777884554616,
+      "tag": "0015_glorious_chameleon",
+      "breakpoints": true
     }
   ]
 }

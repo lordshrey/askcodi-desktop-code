@@ -7,6 +7,8 @@ import {
   Send,
   Bot,
   User as UserIcon,
+  ChevronRight,
+  ChevronLeft,
 } from "lucide-react"
 import { cn } from "@/lib/utils"
 import { Button } from "@/components/ui/button"
@@ -57,6 +59,20 @@ interface IssueDetailViewProps {
   issueId: string
 }
 
+/**
+ * Chat-first task surface. Layout:
+ *   ┌─ Header ─────────────────────────────────────┐
+ *   │ Issue meta + Run button                       │
+ *   ├──────────────────────────────────┬───────────┤
+ *   │  CHAT  (primary, full height)    │  Side     │
+ *   │  - existing comments thread      │  panel:   │
+ *   │  - composer at bottom            │  Plan/    │
+ *   │                                  │  Diff/    │
+ *   │                                  │  Runs     │
+ *   └──────────────────────────────────┴───────────┘
+ *
+ * Side panel collapses to a thin gutter to give chat full width.
+ */
 export function IssueDetailView({ issueId }: IssueDetailViewProps) {
   const [, setSelectedIssueId] = useAtom(selectedIssueIdAtom)
   const utils = trpc.useUtils()
@@ -64,8 +80,6 @@ export function IssueDetailView({ issueId }: IssueDetailViewProps) {
   const { data, isLoading } = trpc.issues.get.useQuery(
     { id: issueId },
     {
-      // Stop polling once the issue is terminal AND no run is in flight — saves
-      // 5 SQLite reads per 5s while a closed issue is just being read.
       refetchInterval: (q) => {
         const d = q.state.data as RouterOutputs["issues"]["get"]
         if (!d) return 5000
@@ -92,12 +106,6 @@ export function IssueDetailView({ issueId }: IssueDetailViewProps) {
       void utils.agentRuns.list.invalidate()
     },
   })
-  const updateMutation = trpc.issues.update.useMutation({
-    onSuccess: () => {
-      void utils.issues.list.invalidate()
-      void utils.issues.get.invalidate({ id: issueId })
-    },
-  })
   const addCommentMutation = trpc.issues.addComment.useMutation({
     onSuccess: () => {
       void utils.issues.get.invalidate({ id: issueId })
@@ -106,7 +114,8 @@ export function IssueDetailView({ issueId }: IssueDetailViewProps) {
   })
 
   const [newComment, setNewComment] = useState("")
-  const [activeTab, setActiveTab] = useState("overview")
+  const [sideTab, setSideTab] = useState<"plan" | "diff" | "runs" | "details">("plan")
+  const [sideCollapsed, setSideCollapsed] = useState(false)
 
   if (isLoading || !data) {
     return (
@@ -134,201 +143,320 @@ export function IssueDetailView({ issueId }: IssueDetailViewProps) {
           className="inline-flex items-center gap-1.5 text-sm text-muted-foreground transition-colors hover:text-foreground"
         >
           <ArrowLeft className="h-3.5 w-3.5" />
-          Back to issues
+          Back
         </button>
-        <div className="flex items-center gap-2">
-          {canRun && (
-            <Button
-              size="sm"
-              className="gap-1.5"
-              disabled={runMutation.isPending}
-              onClick={() => runMutation.mutate({ issueId })}
-            >
-              {runMutation.isPending ? <Loader2 className="h-3 w-3 animate-spin" /> : <Play className="h-3 w-3" />}
-              Run
-            </Button>
-          )}
-        </div>
+        {canRun && (
+          <Button
+            size="sm"
+            className="gap-1.5"
+            disabled={runMutation.isPending}
+            onClick={() => runMutation.mutate({ issueId })}
+          >
+            {runMutation.isPending ? <Loader2 className="h-3 w-3 animate-spin" /> : <Play className="h-3 w-3" />}
+            Run
+          </Button>
+        )}
       </header>
 
-      <div className="flex-1 overflow-y-auto">
-        <div className="border-b border-border px-6 py-4">
-          <div className="mb-2 flex items-center gap-2">
-            <span className="font-mono text-xs text-muted-foreground">{issue.identifier}</span>
-            <StatusBadge status={issue.status} />
-            <span className="text-xs text-muted-foreground">·</span>
-            <span className="text-xs text-muted-foreground capitalize">{issue.priority}</span>
-            <span className="text-xs text-muted-foreground">·</span>
-            <AgentChip agent={assignee} />
-            <span className="ml-auto text-xs text-muted-foreground">
-              Updated {timeAgo(issue.updatedAt)}
-            </span>
-          </div>
-          <h1 className="text-xl font-semibold leading-tight">{issue.title}</h1>
+      <div className="border-b border-border px-6 py-4">
+        <div className="mb-2 flex items-center gap-2">
+          <span className="font-mono text-xs text-muted-foreground">{issue.identifier}</span>
+          <StatusBadge status={issue.status} />
+          <span className="text-xs text-muted-foreground">·</span>
+          <span className="text-xs text-muted-foreground capitalize">{issue.priority}</span>
+          <span className="text-xs text-muted-foreground">·</span>
+          <AgentChip agent={assignee} />
+          <span className="ml-auto text-xs text-muted-foreground">
+            Updated {timeAgo(issue.updatedAt)}
+          </span>
         </div>
+        <h1 className="text-xl font-semibold leading-tight">{issue.title}</h1>
+      </div>
 
-        <Tabs value={activeTab} onValueChange={setActiveTab} className="flex-1">
-          <div className="border-b border-border px-6">
-            <TabsList className="h-9 bg-transparent p-0">
-              <TabsTrigger value="overview" className="data-[state=active]:bg-muted">
-                Overview
-              </TabsTrigger>
-              <TabsTrigger value="plan" className="data-[state=active]:bg-muted">
-                Plan {planDoc && <span className="ml-1 text-[10px] text-muted-foreground">v{planDoc.revision}</span>}
-              </TabsTrigger>
-              <TabsTrigger value="comments" className="data-[state=active]:bg-muted">
-                Comments {comments.length > 0 && <span className="ml-1 text-[10px] text-muted-foreground">{comments.length}</span>}
-              </TabsTrigger>
-              <TabsTrigger value="runs" className="data-[state=active]:bg-muted">
-                Runs {runs.length > 0 && <span className="ml-1 text-[10px] text-muted-foreground">{runs.length}</span>}
-              </TabsTrigger>
-            </TabsList>
-          </div>
-
-          <TabsContent value="overview" className="mt-0 border-0 p-6">
-            {issue.description ? (
-              <div className="whitespace-pre-wrap text-sm leading-relaxed">{issue.description}</div>
-            ) : (
-              <div className="text-sm text-muted-foreground italic">No description.</div>
-            )}
-
-            {blockers.length > 0 && (
-              <section className="mt-6">
-                <h3 className="mb-2 text-[11px] font-medium uppercase tracking-wider text-muted-foreground">
-                  Blocked by
-                </h3>
-                <ul className="space-y-1 text-sm">
-                  {blockers.map((b) => (
-                    <li key={b.blocker.id} className="flex items-center gap-2">
-                      <StatusBadge status={b.blocker.status} />
-                      <span className="font-mono text-xs text-muted-foreground">{b.blocker.identifier}</span>
-                      <span>{b.blocker.title}</span>
-                    </li>
-                  ))}
-                </ul>
-              </section>
-            )}
-
-            {otherDocs.length > 0 && (
-              <section className="mt-6">
-                <h3 className="mb-2 text-[11px] font-medium uppercase tracking-wider text-muted-foreground">
-                  Documents
-                </h3>
-                <ul className="space-y-1 text-sm text-muted-foreground">
-                  {otherDocs.map((d) => (
-                    <li key={d.id}>
-                      <span className="font-mono text-xs">{d.key}</span> · v{d.revision} · {timeAgo(d.updatedAt)}
-                    </li>
-                  ))}
-                </ul>
-              </section>
-            )}
-          </TabsContent>
-
-          <TabsContent value="plan" className="mt-0 border-0 p-6">
-            {planDoc ? (
-              <>
-                <div className="mb-3 text-xs text-muted-foreground">
-                  Revision {planDoc.revision} · updated {timeAgo(planDoc.updatedAt)}
+      {/* Two-column body: chat left, side panel right */}
+      <div className="flex flex-1 overflow-hidden">
+        {/* CHAT (primary) */}
+        <div className="flex flex-1 flex-col overflow-hidden">
+          <div className="flex-1 overflow-y-auto px-6 py-4">
+            {issue.description && comments.length === 0 && !liveRun && (
+              <div className="mb-4 rounded-lg border border-border bg-card/30 p-3">
+                <div className="mb-1 text-[11px] uppercase tracking-wider text-muted-foreground">
+                  Task
                 </div>
-                <div className="whitespace-pre-wrap font-mono text-xs leading-relaxed">{planDoc.content}</div>
-              </>
-            ) : (
-              <div className="text-sm text-muted-foreground italic">
-                The assigned agent hasn't written a plan yet. They'll typically call{" "}
-                <code className="rounded bg-muted px-1 py-0.5 text-xs">askcodi__upsertIssueDocument</code> with{" "}
-                key="plan" once they understand the work.
+                <div className="whitespace-pre-wrap text-sm leading-relaxed">{issue.description}</div>
               </div>
             )}
-          </TabsContent>
 
-          <TabsContent value="comments" className="mt-0 border-0">
-            <div className="px-6 pb-3 pt-6">
-              {comments.length === 0 ? (
-                <div className="text-sm text-muted-foreground italic">No comments yet.</div>
-              ) : (
-                <ul className="space-y-3">
-                  {comments.map((c) => {
-                    const author = c.authorRuntimeAgentId
-                      ? agentById.get(c.authorRuntimeAgentId)
-                      : undefined
-                    return (
-                      <li key={c.id} className="rounded-lg border border-border bg-card/30 p-3">
-                        <div className="mb-1.5 flex items-center gap-2 text-xs text-muted-foreground">
-                          {c.isFromUser ? (
-                            <>
-                              <UserIcon className="h-3 w-3" />
-                              <span>You</span>
-                            </>
-                          ) : (
-                            <>
-                              <Bot className="h-3 w-3" />
-                              <span>{author?.name ?? "(deleted agent)"}</span>
-                            </>
-                          )}
-                          <span>·</span>
-                          <span>{timeAgo(c.createdAt)}</span>
-                        </div>
-                        <div className="whitespace-pre-wrap text-sm">{c.body}</div>
-                      </li>
-                    )
-                  })}
-                </ul>
-              )}
-            </div>
-
-            <div className="border-t border-border px-6 py-3">
-              <Textarea
-                value={newComment}
-                onChange={(e) => setNewComment(e.target.value)}
-                placeholder="Add a comment..."
-                className="min-h-[80px] text-sm"
-              />
-              <div className="mt-2 flex justify-end">
-                <Button
-                  size="sm"
-                  className="gap-1.5"
-                  disabled={addCommentMutation.isPending || newComment.trim().length === 0}
-                  onClick={() =>
-                    addCommentMutation.mutate({ issueId, body: newComment.trim() })
-                  }
-                >
-                  {addCommentMutation.isPending ? <Loader2 className="h-3 w-3 animate-spin" /> : <Send className="h-3 w-3" />}
-                  Comment
-                </Button>
+            {comments.length === 0 && !liveRun ? (
+              <div className="mt-12 text-center text-sm text-muted-foreground italic">
+                No conversation yet. Start the agent with Run, or drop a message below.
               </div>
-            </div>
-          </TabsContent>
-
-          <TabsContent value="runs" className="mt-0 border-0 p-6">
-            {liveRun && (
-              <section className="mb-6">
-                <div className="mb-2 flex items-center gap-2">
-                  <span className={cn("h-2 w-2 rounded-full", RUN_STATUS_DOT[liveRun.status])} />
-                  <span className="text-sm font-medium">Live run · {liveRun.status}</span>
-                  <span className="ml-auto text-xs text-muted-foreground">
-                    {liveRun.startedAt ? `started ${timeAgo(liveRun.startedAt)}` : "queued"}
-                  </span>
-                </div>
-                <RunConsole runId={liveRun.id} />
-              </section>
-            )}
-
-            <h3 className="mb-2 text-[11px] font-medium uppercase tracking-wider text-muted-foreground">
-              History
-            </h3>
-            {runs.length === 0 ? (
-              <div className="text-sm text-muted-foreground italic">No runs yet. Click Run to start one.</div>
             ) : (
-              <ul className="space-y-2">
-                {runs.map((r) => (
-                  <RunRow key={r.id} run={r} />
-                ))}
+              <ul className="space-y-3">
+                {comments.map((c) => {
+                  const author = c.authorRuntimeAgentId
+                    ? agentById.get(c.authorRuntimeAgentId)
+                    : undefined
+                  return (
+                    <li
+                      key={c.id}
+                      className={cn(
+                        "rounded-lg border p-3",
+                        c.isFromUser
+                          ? "border-primary/30 bg-primary/5"
+                          : "border-border bg-card/30",
+                      )}
+                    >
+                      <div className="mb-1.5 flex items-center gap-2 text-xs text-muted-foreground">
+                        {c.isFromUser ? (
+                          <>
+                            <UserIcon className="h-3 w-3" />
+                            <span>You</span>
+                          </>
+                        ) : (
+                          <>
+                            <Bot className="h-3 w-3" />
+                            <span>{author?.name ?? "(deleted agent)"}</span>
+                          </>
+                        )}
+                        <span>·</span>
+                        <span>{timeAgo(c.createdAt)}</span>
+                      </div>
+                      <div className="whitespace-pre-wrap text-sm">{c.body}</div>
+                    </li>
+                  )
+                })}
               </ul>
             )}
-          </TabsContent>
-        </Tabs>
+
+            {liveRun && (
+              <div className="mt-4">
+                <div className="mb-2 flex items-center gap-2">
+                  <span className={cn("h-2 w-2 rounded-full", RUN_STATUS_DOT[liveRun.status])} />
+                  <span className="text-xs font-medium uppercase tracking-wider">Live run</span>
+                </div>
+                <RunConsole runId={liveRun.id} />
+              </div>
+            )}
+          </div>
+
+          {/* Composer */}
+          <div className="border-t border-border px-6 py-3">
+            <Textarea
+              value={newComment}
+              onChange={(e) => setNewComment(e.target.value)}
+              placeholder={
+                assignee
+                  ? `Message ${assignee.name}...`
+                  : "Add a comment..."
+              }
+              className="min-h-[60px] text-sm"
+              onKeyDown={(e) => {
+                if ((e.metaKey || e.ctrlKey) && e.key === "Enter" && newComment.trim()) {
+                  addCommentMutation.mutate({ issueId, body: newComment.trim() })
+                }
+              }}
+            />
+            <div className="mt-2 flex items-center justify-between">
+              <span className="text-[11px] text-muted-foreground">⌘↩ to send</span>
+              <Button
+                size="sm"
+                className="gap-1.5"
+                disabled={addCommentMutation.isPending || newComment.trim().length === 0}
+                onClick={() => addCommentMutation.mutate({ issueId, body: newComment.trim() })}
+              >
+                {addCommentMutation.isPending ? (
+                  <Loader2 className="h-3 w-3 animate-spin" />
+                ) : (
+                  <Send className="h-3 w-3" />
+                )}
+                Send
+              </Button>
+            </div>
+          </div>
+        </div>
+
+        {/* Side panel: Plan / Diff / Runs */}
+        <div
+          className={cn(
+            "flex flex-col border-l border-border transition-all",
+            sideCollapsed ? "w-10" : "w-[400px]",
+          )}
+        >
+          <button
+            type="button"
+            onClick={() => setSideCollapsed((v) => !v)}
+            className="flex items-center justify-center border-b border-border py-2 text-muted-foreground hover:bg-muted/40"
+            title={sideCollapsed ? "Expand panel" : "Collapse panel"}
+          >
+            {sideCollapsed ? <ChevronLeft className="h-4 w-4" /> : <ChevronRight className="h-4 w-4" />}
+          </button>
+          {!sideCollapsed && (
+            <Tabs value={sideTab} onValueChange={(v) => setSideTab(v as typeof sideTab)} className="flex flex-1 flex-col overflow-hidden">
+              <TabsList className="h-9 w-full justify-start rounded-none border-b border-border bg-transparent px-2">
+                <TabsTrigger value="plan" className="text-xs data-[state=active]:bg-muted">
+                  Plan {planDoc && <span className="ml-1 text-[9px] text-muted-foreground">v{planDoc.revision}</span>}
+                </TabsTrigger>
+                <TabsTrigger value="diff" className="text-xs data-[state=active]:bg-muted">
+                  Diff
+                </TabsTrigger>
+                <TabsTrigger value="runs" className="text-xs data-[state=active]:bg-muted">
+                  Runs {runs.length > 0 && <span className="ml-1 text-[9px] text-muted-foreground">{runs.length}</span>}
+                </TabsTrigger>
+                <TabsTrigger value="details" className="text-xs data-[state=active]:bg-muted">
+                  Details
+                </TabsTrigger>
+              </TabsList>
+
+              <TabsContent value="plan" className="mt-0 flex-1 overflow-y-auto border-0 p-4">
+                {planDoc ? (
+                  <>
+                    <div className="mb-3 text-[11px] text-muted-foreground">
+                      Revision {planDoc.revision} · updated {timeAgo(planDoc.updatedAt)}
+                    </div>
+                    <div className="whitespace-pre-wrap font-mono text-[11px] leading-relaxed">
+                      {planDoc.content}
+                    </div>
+                  </>
+                ) : (
+                  <div className="text-xs text-muted-foreground italic">
+                    No plan yet. The agent will write one with{" "}
+                    <code className="rounded bg-muted px-1 py-0.5">askcodi__upsertIssueDocument</code>.
+                  </div>
+                )}
+              </TabsContent>
+
+              <TabsContent value="diff" className="mt-0 flex-1 overflow-hidden border-0 p-0">
+                <DiffPanel
+                  issueId={issueId}
+                  agentId={issue.assigneeRuntimeAgentId ?? null}
+                  hasLiveRun={!!liveRun}
+                />
+              </TabsContent>
+
+              <TabsContent value="runs" className="mt-0 flex-1 overflow-y-auto border-0 p-4">
+                {runs.length === 0 ? (
+                  <div className="text-xs text-muted-foreground italic">No runs yet.</div>
+                ) : (
+                  <ul className="space-y-2">
+                    {runs.map((r) => (
+                      <RunRow key={r.id} run={r} />
+                    ))}
+                  </ul>
+                )}
+              </TabsContent>
+
+              <TabsContent value="details" className="mt-0 flex-1 overflow-y-auto border-0 p-4">
+                {issue.description && (
+                  <section className="mb-4">
+                    <h3 className="mb-1.5 text-[10px] font-medium uppercase tracking-wider text-muted-foreground">
+                      Description
+                    </h3>
+                    <div className="whitespace-pre-wrap text-xs leading-relaxed">{issue.description}</div>
+                  </section>
+                )}
+                {blockers.length > 0 && (
+                  <section className="mb-4">
+                    <h3 className="mb-1.5 text-[10px] font-medium uppercase tracking-wider text-muted-foreground">
+                      Blocked by
+                    </h3>
+                    <ul className="space-y-1 text-xs">
+                      {blockers.map((b) => (
+                        <li key={b.blocker.id} className="flex items-center gap-2">
+                          <StatusBadge status={b.blocker.status} />
+                          <span className="font-mono text-[10px] text-muted-foreground">{b.blocker.identifier}</span>
+                          <span className="truncate">{b.blocker.title}</span>
+                        </li>
+                      ))}
+                    </ul>
+                  </section>
+                )}
+                {otherDocs.length > 0 && (
+                  <section>
+                    <h3 className="mb-1.5 text-[10px] font-medium uppercase tracking-wider text-muted-foreground">
+                      Documents
+                    </h3>
+                    <ul className="space-y-1 text-xs text-muted-foreground">
+                      {otherDocs.map((d) => (
+                        <li key={d.id}>
+                          <span className="font-mono">{d.key}</span> · v{d.revision} · {timeAgo(d.updatedAt)}
+                        </li>
+                      ))}
+                    </ul>
+                  </section>
+                )}
+              </TabsContent>
+            </Tabs>
+          )}
+        </div>
       </div>
+    </div>
+  )
+}
+
+function DiffPanel({
+  issueId,
+  agentId,
+  hasLiveRun,
+}: {
+  issueId: string
+  agentId: string | null
+  hasLiveRun: boolean
+}) {
+  const { data: worktrees = [] } = trpc.agentWorktrees.list.useQuery(
+    { issueId, openOnly: true },
+    { enabled: !!agentId },
+  )
+  // Schema enforces ≤ 1 open worktree per (agent, repo, issue) via the
+  // agent_worktrees_open_uq partial unique index — taking [0] is safe.
+  const worktree = worktrees[0]
+  // Only poll the diff while a run is in flight; once terminal, the diff is
+  // static until the next run starts.
+  const { data: diffData } = trpc.agentWorktrees.diff.useQuery(
+    worktree ? { worktreeId: worktree.id } : ({ worktreeId: "" } as { worktreeId: string }),
+    {
+      enabled: !!worktree,
+      refetchInterval: hasLiveRun ? 5000 : false,
+      refetchIntervalInBackground: false,
+    },
+  )
+
+  if (!agentId) {
+    return (
+      <div className="p-4 text-xs text-muted-foreground italic">
+        Assign an agent to this issue to track changes.
+      </div>
+    )
+  }
+  if (!worktree) {
+    return (
+      <div className="p-4 text-xs text-muted-foreground italic">
+        No worktree yet. The agent provisions one when they start work on this issue.
+      </div>
+    )
+  }
+  if (!diffData) {
+    return <div className="p-4 text-xs text-muted-foreground italic">Loading diff…</div>
+  }
+  if ("error" in diffData && diffData.error) {
+    return <div className="p-4 text-xs text-red-400">Diff failed: {diffData.error}</div>
+  }
+  if (diffData.bytes === 0) {
+    return (
+      <div className="p-4 text-xs text-muted-foreground italic">
+        No changes yet on branch <code className="rounded bg-muted px-1">{worktree.branch}</code>.
+      </div>
+    )
+  }
+  return (
+    <div className="flex h-full flex-col overflow-hidden">
+      <div className="border-b border-border px-3 py-2 text-[10px] text-muted-foreground">
+        <span className="font-mono">{worktree.branch}</span> ↔ <span className="font-mono">{worktree.baseBranch}</span>
+        {diffData.truncated && <span className="ml-2 text-amber-500">truncated at 256kB</span>}
+      </div>
+      <pre className="flex-1 overflow-auto whitespace-pre p-3 font-mono text-[10px] leading-relaxed">
+        {diffData.diff}
+      </pre>
     </div>
   )
 }
@@ -337,47 +465,30 @@ function RunRow({ run }: { run: RunRow }) {
   const [expanded, setExpanded] = useState(false)
   const usage = run.usageJson
   return (
-    <li className="rounded-lg border border-border bg-card/30 p-3">
+    <li className="rounded-lg border border-border bg-card/30 p-2">
       <button
         type="button"
-        className="flex w-full items-center gap-2 text-left"
+        className="flex w-full items-center gap-1.5 text-left"
         onClick={() => setExpanded((v) => !v)}
       >
-        <span className={cn("h-2 w-2 rounded-full", RUN_STATUS_DOT[run.status])} />
-        <span className="text-sm capitalize">{run.status.replace("_", " ")}</span>
-        <span className="text-xs text-muted-foreground">·</span>
-        <span className="text-xs text-muted-foreground">
+        <span className={cn("h-1.5 w-1.5 rounded-full", RUN_STATUS_DOT[run.status])} />
+        <span className="text-xs capitalize">{run.status.replace("_", " ")}</span>
+        <span className="ml-auto text-[10px] text-muted-foreground tabular-nums">
           {run.startedAt
-            ? `${timeAgo(run.startedAt)}${run.finishedAt ? ` · ${Math.max(1, Math.round((+new Date(run.finishedAt) - +new Date(run.startedAt)) / 1000))}s` : ""}`
-            : `queued ${timeAgo(run.createdAt)}`}
+            ? `${Math.max(1, Math.round((+new Date(run.finishedAt ?? new Date()) - +new Date(run.startedAt)) / 1000))}s`
+            : "queued"}
         </span>
-        {usage && (
-          <span className="ml-auto text-xs text-muted-foreground tabular-nums">
-            {usage.inputTokens.toLocaleString()} in · {usage.outputTokens.toLocaleString()} out
-          </span>
-        )}
       </button>
       {expanded && (
-        <div className="mt-3 space-y-2 border-t border-border pt-2 text-xs">
+        <div className="mt-2 space-y-1.5 border-t border-border pt-1.5 text-[10px]">
           {run.error && (
-            <div className="rounded border border-red-500/30 bg-red-500/10 p-2 text-red-400">
-              {run.errorCode ? <span className="font-mono">[{run.errorCode}]</span> : null} {run.error}
+            <div className="rounded border border-red-500/30 bg-red-500/10 p-1.5 text-red-400">
+              {run.errorCode && <span className="font-mono">[{run.errorCode}]</span>} {run.error}
             </div>
           )}
-          {run.stdoutExcerpt && (
-            <div>
-              <div className="mb-1 text-muted-foreground">stdout (last)</div>
-              <pre className="max-h-48 overflow-auto whitespace-pre-wrap rounded border border-border bg-background/50 p-2 font-mono text-[11px] leading-relaxed">
-                {run.stdoutExcerpt}
-              </pre>
-            </div>
-          )}
-          {run.stderrExcerpt && (
-            <div>
-              <div className="mb-1 text-muted-foreground">stderr (last)</div>
-              <pre className="max-h-32 overflow-auto whitespace-pre-wrap rounded border border-red-500/20 bg-red-500/5 p-2 font-mono text-[11px] leading-relaxed">
-                {run.stderrExcerpt}
-              </pre>
+          {usage && (
+            <div className="text-muted-foreground tabular-nums">
+              {usage.inputTokens.toLocaleString()} in · {usage.outputTokens.toLocaleString()} out
             </div>
           )}
         </div>

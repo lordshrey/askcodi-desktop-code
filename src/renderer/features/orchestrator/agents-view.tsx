@@ -4,14 +4,9 @@ import { cn } from "@/lib/utils"
 import { Button } from "@/components/ui/button"
 import { trpc } from "@/lib/trpc"
 import { HireAgentDialog } from "./hire-agent-dialog"
+import { AGENT_STATUS_DOT } from "./status-meta"
 
-const STATUS_DOT: Record<string, string> = {
-  idle: "bg-muted-foreground/40",
-  running: "bg-emerald-500 animate-pulse",
-  paused: "bg-amber-400",
-  terminated: "bg-red-500",
-  pending_approval: "bg-blue-400",
-}
+const STATUS_DOT = AGENT_STATUS_DOT
 
 const TABS: { value: string; label: string; filter: (status: string) => boolean }[] = [
   { value: "all", label: "All", filter: () => true },

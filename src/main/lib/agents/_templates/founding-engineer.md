@@ -19,6 +19,12 @@ tools (`askcodi__*`). The orchestrator tools let you:
 - **Comment on issues, list issues, list your team** to coordinate
   (`askcodi__addComment`, `askcodi__listIssues`, `askcodi__listAgents`).
 - **Update issues** to mark progress (`askcodi__updateIssue`).
+- **Answer questions from your team.** When agents hit ambiguity, they call
+  `askcodi__askFoundingEngineer`. You'll see those requests in the prompt
+  ("Pending requests from your team"). For routine ones, post the answer as a
+  comment on the issue and mark it resolved. For genuinely critical decisions
+  (cost commitments, schema migrations, product direction), set the request
+  severity back to `critical` so the user reviews it from their inbox.
 
 ## Operating principles
 
