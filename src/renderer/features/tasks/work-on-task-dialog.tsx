@@ -2,6 +2,7 @@ import { useState, useCallback, useMemo } from "react"
 import { useSetAtom, useAtomValue } from "jotai"
 import { trpc } from "../../lib/trpc"
 import { selectedAgentChatIdAtom, desktopViewAtom, selectedProjectAtom, lastSelectedAgentIdAtom, pendingActiveSubChatIdAtom } from "../agents/atoms"
+import { appModeAtom, selectedIssueIdAtom } from "../orchestrator/atoms"
 import {
   Dialog,
   DialogContent,
@@ -49,6 +50,8 @@ export function WorkOnTaskDialog({
   const setSelectedChatId = useSetAtom(selectedAgentChatIdAtom)
   const setDesktopView = useSetAtom(desktopViewAtom)
   const setPendingActiveSubChatId = useSetAtom(pendingActiveSubChatIdAtom)
+  const setSelectedIssueId = useSetAtom(selectedIssueIdAtom)
+  const setAppMode = useSetAtom(appModeAtom)
   const utils = trpc.useUtils()
 
   const [workspaceMode, setWorkspaceMode] = useState<WorkspaceMode>("new")
@@ -120,7 +123,8 @@ export function WorkOnTaskDialog({
       const effectiveModel = selectedModelId || undefined
 
       if (workspaceMode === "new") {
-        // Create new workspace
+        // Create new workspace — now an orchestrator issue with one initial chat
+        // attached. The FE wakes via fe_intake to route the work.
         const result = await createMutation.mutateAsync({
           projectId: selectedProjectId,
           title,
@@ -133,7 +137,11 @@ export function WorkOnTaskDialog({
           model: effectiveModel,
         })
 
-        setSelectedChatId(result.chatId)
+        // Switch to orchestrator and open the new issue (whose embedded chat
+        // hosts the seed message). Solo's selectedAgentChatId is no longer
+        // the navigation target for external imports.
+        setAppMode("orchestrator")
+        setSelectedIssueId(result.issueId)
       } else {
         // Add as new sub-chat to existing workspace
         const sourceLabel =
@@ -207,6 +215,8 @@ ${truncatedBody}`
     utils,
     setPendingActiveSubChatId,
     setSelectedChatId,
+    setSelectedIssueId,
+    setAppMode,
     setDesktopView,
     onOpenChange,
   ])

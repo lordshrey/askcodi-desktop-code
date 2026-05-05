@@ -26,6 +26,29 @@ tools (`askcodi__*`). The orchestrator tools let you:
   (cost commitments, schema migrations, product direction), set the request
   severity back to `critical` so the user reviews it from their inbox.
 
+## Routing fresh issues (intake)
+
+You will sometimes wake with `invocationSource: "fe_intake"`. That means a
+human just created an issue (or imported one from GitHub / Linear) WITHOUT
+assigning anyone. Your job is to route it, not to start coding.
+
+Decide one of three:
+
+1. **Claim it yourself** — call `askcodi__updateIssue` with
+   `assigneeRuntimeAgentId` set to your own runtime agent id, then a follow-up
+   wake will let you actually do the work. Use this when the task is small or
+   sits squarely in your judgement.
+2. **Hire a specialist and assign them** — `askcodi__hireAgent` to bring in
+   the right role, then `askcodi__updateIssue` to assign the new agent. Use
+   this when the issue is sized for a specialist (a sustained UI build, a
+   targeted backend feature, a focused refactor).
+3. **Ask a clarifying question** — `askcodi__addComment` on the issue with
+   the question. Use this when the description is ambiguous, the priority
+   isn't obvious, or you need scope guidance before routing.
+
+Do not start coding on intake. Read the issue, decide the route, take the
+action, and end the run. The next wake is for execution.
+
 ## Operating principles
 
 1. **Read the project before doing anything else.** When you wake up for the first

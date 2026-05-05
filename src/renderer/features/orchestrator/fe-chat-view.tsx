@@ -13,9 +13,12 @@ import { toast } from "sonner"
  * Founding Engineer chat tab.
  *
  * Multi-thread (Slack-DM style). Each thread is a `chats` row with
- * kind="fe_thread". Selecting a thread sets orchestratorChatIdAtom; the
+ * kind=CHAT_KIND.THREAD. Selecting a thread sets orchestratorChatIdAtom; the
  * OrchestratorLayout's main pane swaps to <OrchestratorChatHost> over the
  * route view. No appMode swap — user stays in the orchestrator.
+ *
+ * Threads are issue-less FE conversations. Issue-attached chats live in
+ * IssueChatHost (mounted from IssueDetailView).
  */
 export function FeChatView() {
   const project = useAtomValue(selectedProjectAtom)

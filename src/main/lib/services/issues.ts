@@ -293,6 +293,33 @@ export async function createIssue(input: CreateIssueInput): Promise<Issue> {
     },
   })
 
+  // FE intake: when a human creates an issue without an assignee, wake the
+  // Founding Engineer so it can route the work. Skip when:
+  //   - assignee is already set (someone else owns it)
+  //   - actor is system/agent (auto-hire first-mission, agent-spawned issues
+  //     route via the spawning agent, not FE)
+  //   - originKind is "child_of_issue" (parent agent already decided routing)
+  //
+  // Imported lazily to avoid a top-level import cycle (heartbeat → wake →
+  // executeRun → services/issues for getIssue, and circling back).
+  const isUserCreated = input.actor.type === "user" && input.createdByRuntimeAgentId == null
+  const eligibleOrigin = (input.originKind ?? "manual") !== "child_of_issue"
+  if (isUserCreated && created.assigneeRuntimeAgentId == null && eligibleOrigin) {
+    void (async () => {
+      const { enqueueFeIntake } = await import("./fe-intake")
+      try {
+        await enqueueFeIntake({
+          projectId: created.projectId,
+          issueId: created.id,
+          reason: input.originKind === "external_task_link" ? "external_import" : "manual_create",
+        })
+      } catch (err) {
+        // eslint-disable-next-line no-console
+        console.error("[createIssue] FE intake failed:", err)
+      }
+    })()
+  }
+
   return created
 }
 

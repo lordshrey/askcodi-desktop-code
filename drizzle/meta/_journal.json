@@ -113,6 +113,13 @@
       "when": 1777884554616,
       "tag": "0015_glorious_chameleon",
       "breakpoints": true
+    },
+    {
+      "idx": 16,
+      "version": "6",
+      "when": 1777906879737,
+      "tag": "0016_right_multiple_man",
+      "breakpoints": true
     }
   ]
 }

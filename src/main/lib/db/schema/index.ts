@@ -1,6 +1,7 @@
-import { index, sqliteTable, text, integer } from "drizzle-orm/sqlite-core"
+import { index, sqliteTable, text, integer, type AnySQLiteColumn } from "drizzle-orm/sqlite-core"
 import { relations } from "drizzle-orm"
 import { createId } from "../utils"
+import { issues } from "./issues"
 
 // ============ PROJECTS ============
 export const projects = sqliteTable("projects", {
@@ -60,13 +61,19 @@ export const chats = sqliteTable("chats", {
   sourceIdentifier: text("source_identifier"), // "#42" or "ENG-123"
   // Plugin mode (scopes agent to a specific plugin's capabilities)
   pluginId: text("plugin_id"),            // Plugin source identifier, e.g. "official:stripe-dev"
-  // Chat kind. "solo" = traditional 1:1 user↔Claude chat (default; backwards-compat).
-  // "fe_thread" = thread inside the orchestrator FE chat tab; the FE answers.
+  // Chat kind:
+  //   "solo"       — traditional 1:1 user↔Claude chat (Solo mode; default; backwards-compat).
+  //   "thread"     — issue-less orchestrator thread (FE answers; was "fe_thread").
+  //   "issue_chat" — chat attached to an orchestrator issue; many per issue.
   kind: text("kind").notNull().default("solo"), // ChatKind
+  // Issue link. Null for solo and thread; set for issue_chat. CASCADE so deleting an
+  // issue cleans up its chats — matches the rest of the orchestrator schema.
+  issueId: text("issue_id").references((): AnySQLiteColumn => issues.id, { onDelete: "cascade" }),
 }, (table) => [
   index("chats_worktree_path_idx").on(table.worktreePath),
   index("chats_source_url_idx").on(table.sourceUrl),
   index("chats_kind_idx").on(table.kind),
+  index("chats_issue_id_idx").on(table.issueId),
 ])
 
 export const chatsRelations = relations(chats, ({ one, many }) => ({
@@ -74,12 +81,17 @@ export const chatsRelations = relations(chats, ({ one, many }) => ({
     fields: [chats.projectId],
     references: [projects.id],
   }),
+  issue: one(issues, {
+    fields: [chats.issueId],
+    references: [issues.id],
+  }),
   subChats: many(subChats),
 }))
 
 export const CHAT_KIND = {
   SOLO: "solo",
-  FE_THREAD: "fe_thread",
+  THREAD: "thread",
+  ISSUE_CHAT: "issue_chat",
 } as const
 export type ChatKind = (typeof CHAT_KIND)[keyof typeof CHAT_KIND]
 

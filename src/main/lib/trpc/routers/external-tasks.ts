@@ -2,9 +2,10 @@ import { z } from "zod"
 import { publicProcedure, router } from "../index"
 import { GitHubAPI } from "../../integrations/github-api"
 import { LinearAPI } from "../../integrations/linear-api"
-import { getDatabase, chats, subChats, projects } from "../../db"
+import { getDatabase, projects, CHAT_KIND } from "../../db"
 import { eq } from "drizzle-orm"
-import { createId } from "../../db/utils"
+import { createIssue } from "../../services/issues"
+import { createChatWithInitialSubChat } from "../../services/chats"
 
 const githubRouter = router({
   listRepos: publicProcedure.query(() => {
@@ -142,7 +143,7 @@ export const externalTasksRouter = router({
       model: z.string().optional(),
       provider: z.enum(["claude-code", "codex", "askcodi"]).optional(),
     }))
-    .mutation(({ input }) => {
+    .mutation(async ({ input }) => {
       const db = getDatabase()
 
       // Verify project exists
@@ -153,7 +154,7 @@ export const externalTasksRouter = router({
         : input.sourceType === "github-pr" ? "Pull Request"
         : "Linear Ticket"
 
-      // Truncate body to ~4000 chars
+      // Truncate body to ~4000 chars for the chat seed message
       const truncatedBody = input.body.length > 4000
         ? input.body.slice(0, 4000) + "\n\n... (truncated)"
         : input.body
@@ -172,41 +173,50 @@ ${truncatedBody}`
 
       initialMessage += `\n\nAnalyze this and implement the necessary changes.`
 
-      const chatId = createId()
-      const subChatId = createId()
-      const chatName = `[${input.sourceIdentifier}] ${input.title}`.slice(0, 100)
-
-      // Create chat with worktreePath set to project path so the agent can start
-      db.insert(chats).values({
-        id: chatId,
-        name: chatName,
-        projectId: input.projectId,
-        worktreePath: project.path,
-        sourceUrl: input.sourceUrl,
-        sourceType: input.sourceType,
-        sourceIdentifier: input.sourceIdentifier,
-      }).run()
-
-      // Create sub-chat with initial message in AI SDK format
       const metadata: Record<string, string> = {}
       if (input.model) metadata.model = input.model
       if (input.provider) metadata.provider = input.provider
 
-      const messages = JSON.stringify([{
+      const initialMessages = JSON.stringify([{
         id: `msg-${Date.now()}`,
         role: "user",
         parts: [{ type: "text", text: initialMessage }],
         ...(Object.keys(metadata).length > 0 ? { metadata } : {}),
       }])
 
-      db.insert(subChats).values({
-        id: subChatId,
-        name: "Main",
-        chatId,
-        mode: "agent",
-        messages,
-      }).run()
+      // External tasks now create orchestrator issues, not Solo chats. The FE
+      // wakes (via fe_intake) and routes the work — claim, hire, or ask.
+      // createIssue logs activity asynchronously, which precludes a sync
+      // better-sqlite3 transaction across both inserts; the chat insert is a
+      // single write that's vanishingly unlikely to fail given the issue write
+      // succeeded. Phase 2 may move both into a sync helper if it matters.
+      const issue = await createIssue({
+        projectId: input.projectId,
+        title: input.title.slice(0, 200),
+        description: truncatedBody,
+        priority: "medium",
+        status: "todo",
+        originKind: "external_task_link",
+        originId: input.sourceIdentifier,
+        actor: { type: "user", id: "self" },
+      })
 
-      return { chatId, subChatId }
+      const { chat, subChatId } = createChatWithInitialSubChat({
+        projectId: input.projectId,
+        kind: CHAT_KIND.ISSUE_CHAT,
+        name: `[${input.sourceIdentifier}] ${input.title}`.slice(0, 100),
+        issueId: issue.id,
+        worktreePath: project.path,
+        sourceUrl: input.sourceUrl,
+        sourceType: input.sourceType,
+        sourceIdentifier: input.sourceIdentifier,
+        initialMessages,
+      })
+
+      // FE intake fires automatically from createIssue() above (user actor +
+      // no assignee + non-child origin). No need to enqueue a second wakeup
+      // here — that would just spawn a duplicate run.
+
+      return { issueId: issue.id, chatId: chat.id, subChatId }
     }),
 })

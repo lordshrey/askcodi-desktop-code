@@ -6,18 +6,21 @@ import { CHAT_KIND, chats, projects, subChats } from "./schema"
 type Db = ReturnType<typeof drizzle<typeof schema>>
 
 /**
- * One-shot backfill for FE-thread chat rows created before the create-path
+ * One-shot backfill for thread chat rows created before the create-path
  * seeded worktreePath + an initial sub-chat. Idempotent — only writes for
  * rows still missing those fields.
  *
  * Replaces per-request lazy repair, which ran on every fe-chat-view list
  * refetch (every 5s) and every chat.get call.
+ *
+ * Renamed from backfillFeThreads when CHAT_KIND.FE_THREAD was renamed to
+ * CHAT_KIND.THREAD; SQL-level rename happens in migration 0016.
  */
-export function backfillFeThreads(db: Db): void {
+export function backfillThreads(db: Db): void {
   const missingWorktree = db
     .select({ id: chats.id, projectId: chats.projectId })
     .from(chats)
-    .where(and(eq(chats.kind, CHAT_KIND.FE_THREAD), isNull(chats.worktreePath)))
+    .where(and(eq(chats.kind, CHAT_KIND.THREAD), isNull(chats.worktreePath)))
     .all()
 
   for (const row of missingWorktree) {
@@ -44,7 +47,7 @@ export function backfillFeThreads(db: Db): void {
     .from(chats)
     .where(
       and(
-        eq(chats.kind, CHAT_KIND.FE_THREAD),
+        eq(chats.kind, CHAT_KIND.THREAD),
         subChattedIds.length > 0
           ? notInArray(chats.id, subChattedIds)
           : sql`1 = 1`,

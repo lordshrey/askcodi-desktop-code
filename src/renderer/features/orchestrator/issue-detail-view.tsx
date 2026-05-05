@@ -4,7 +4,6 @@ import {
   ArrowLeft,
   Loader2,
   Play,
-  Send,
   Bot,
   User as UserIcon,
   ChevronRight,
@@ -12,10 +11,10 @@ import {
 } from "lucide-react"
 import { cn } from "@/lib/utils"
 import { Button } from "@/components/ui/button"
-import { Textarea } from "@/components/ui/textarea"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { trpc, type RouterOutputs } from "@/lib/trpc"
 import { selectedIssueIdAtom } from "./atoms"
+import { IssueChatHost } from "./issue-chat-host"
 import { RunConsole } from "./run-console"
 import {
   ISSUE_STATUS_META,
@@ -60,16 +59,21 @@ interface IssueDetailViewProps {
 }
 
 /**
- * Chat-first task surface. Layout:
+ * Issue surface. Layout:
  *   ┌─ Header ─────────────────────────────────────┐
  *   │ Issue meta + Run button                       │
  *   ├──────────────────────────────────┬───────────┤
- *   │  CHAT  (primary, full height)    │  Side     │
- *   │  - existing comments thread      │  panel:   │
- *   │  - composer at bottom            │  Plan/    │
- *   │                                  │  Diff/    │
- *   │                                  │  Runs     │
+ *   │  CHAT (embedded ChatView via     │  Side     │
+ *   │  IssueChatHost; multi-chat tab   │  panel:   │
+ *   │  strip when ≥ 2 chats; one chat  │  Plan/    │
+ *   │  per "agent session" on this     │  Diff/    │
+ *   │  issue)                          │  Runs/    │
+ *   │                                  │  Comments │
  *   └──────────────────────────────────┴───────────┘
+ *
+ * Comments stay readable in a Comments side-panel tab — they arrive from the
+ * MCP `addComment` tool and represent durable annotations from agents. The
+ * chat surface is for conversation; the Comments tab is the audit trail.
  *
  * Side panel collapses to a thin gutter to give chat full width.
  */
@@ -106,15 +110,8 @@ export function IssueDetailView({ issueId }: IssueDetailViewProps) {
       void utils.agentRuns.list.invalidate()
     },
   })
-  const addCommentMutation = trpc.issues.addComment.useMutation({
-    onSuccess: () => {
-      void utils.issues.get.invalidate({ id: issueId })
-      setNewComment("")
-    },
-  })
 
-  const [newComment, setNewComment] = useState("")
-  const [sideTab, setSideTab] = useState<"plan" | "diff" | "runs" | "details">("plan")
+  const [sideTab, setSideTab] = useState<"plan" | "diff" | "runs" | "comments" | "details">("plan")
   const [sideCollapsed, setSideCollapsed] = useState(false)
 
   if (isLoading || !data) {
@@ -175,108 +172,12 @@ export function IssueDetailView({ issueId }: IssueDetailViewProps) {
 
       {/* Two-column body: chat left, side panel right */}
       <div className="flex flex-1 overflow-hidden">
-        {/* CHAT (primary) */}
+        {/* CHAT (primary): IssueChatHost mounts ChatView for the issue's chats. */}
         <div className="flex flex-1 flex-col overflow-hidden">
-          <div className="flex-1 overflow-y-auto px-6 py-4">
-            {issue.description && comments.length === 0 && !liveRun && (
-              <div className="mb-4 rounded-lg border border-border bg-card/30 p-3">
-                <div className="mb-1 text-[11px] uppercase tracking-wider text-muted-foreground">
-                  Task
-                </div>
-                <div className="whitespace-pre-wrap text-sm leading-relaxed">{issue.description}</div>
-              </div>
-            )}
-
-            {comments.length === 0 && !liveRun ? (
-              <div className="mt-12 text-center text-sm text-muted-foreground italic">
-                No conversation yet. Start the agent with Run, or drop a message below.
-              </div>
-            ) : (
-              <ul className="space-y-3">
-                {comments.map((c) => {
-                  const author = c.authorRuntimeAgentId
-                    ? agentById.get(c.authorRuntimeAgentId)
-                    : undefined
-                  return (
-                    <li
-                      key={c.id}
-                      className={cn(
-                        "rounded-lg border p-3",
-                        c.isFromUser
-                          ? "border-primary/30 bg-primary/5"
-                          : "border-border bg-card/30",
-                      )}
-                    >
-                      <div className="mb-1.5 flex items-center gap-2 text-xs text-muted-foreground">
-                        {c.isFromUser ? (
-                          <>
-                            <UserIcon className="h-3 w-3" />
-                            <span>You</span>
-                          </>
-                        ) : (
-                          <>
-                            <Bot className="h-3 w-3" />
-                            <span>{author?.name ?? "(deleted agent)"}</span>
-                          </>
-                        )}
-                        <span>·</span>
-                        <span>{timeAgo(c.createdAt)}</span>
-                      </div>
-                      <div className="whitespace-pre-wrap text-sm">{c.body}</div>
-                    </li>
-                  )
-                })}
-              </ul>
-            )}
-
-            {liveRun && (
-              <div className="mt-4">
-                <div className="mb-2 flex items-center gap-2">
-                  <span className={cn("h-2 w-2 rounded-full", RUN_STATUS_DOT[liveRun.status])} />
-                  <span className="text-xs font-medium uppercase tracking-wider">Live run</span>
-                </div>
-                <RunConsole runId={liveRun.id} />
-              </div>
-            )}
-          </div>
-
-          {/* Composer */}
-          <div className="border-t border-border px-6 py-3">
-            <Textarea
-              value={newComment}
-              onChange={(e) => setNewComment(e.target.value)}
-              placeholder={
-                assignee
-                  ? `Message ${assignee.name}...`
-                  : "Add a comment..."
-              }
-              className="min-h-[60px] text-sm"
-              onKeyDown={(e) => {
-                if ((e.metaKey || e.ctrlKey) && e.key === "Enter" && newComment.trim()) {
-                  addCommentMutation.mutate({ issueId, body: newComment.trim() })
-                }
-              }}
-            />
-            <div className="mt-2 flex items-center justify-between">
-              <span className="text-[11px] text-muted-foreground">⌘↩ to send</span>
-              <Button
-                size="sm"
-                className="gap-1.5"
-                disabled={addCommentMutation.isPending || newComment.trim().length === 0}
-                onClick={() => addCommentMutation.mutate({ issueId, body: newComment.trim() })}
-              >
-                {addCommentMutation.isPending ? (
-                  <Loader2 className="h-3 w-3 animate-spin" />
-                ) : (
-                  <Send className="h-3 w-3" />
-                )}
-                Send
-              </Button>
-            </div>
-          </div>
+          <IssueChatHost issueId={issueId} />
         </div>
 
-        {/* Side panel: Plan / Diff / Runs */}
+        {/* Side panel: Plan / Diff / Runs / Comments / Details */}
         <div
           className={cn(
             "flex flex-col border-l border-border transition-all",
@@ -302,6 +203,9 @@ export function IssueDetailView({ issueId }: IssueDetailViewProps) {
                 </TabsTrigger>
                 <TabsTrigger value="runs" className="text-xs data-[state=active]:bg-muted">
                   Runs {runs.length > 0 && <span className="ml-1 text-[9px] text-muted-foreground">{runs.length}</span>}
+                </TabsTrigger>
+                <TabsTrigger value="comments" className="text-xs data-[state=active]:bg-muted">
+                  Comments {comments.length > 0 && <span className="ml-1 text-[9px] text-muted-foreground">{comments.length}</span>}
                 </TabsTrigger>
                 <TabsTrigger value="details" className="text-xs data-[state=active]:bg-muted">
                   Details
@@ -335,6 +239,15 @@ export function IssueDetailView({ issueId }: IssueDetailViewProps) {
               </TabsContent>
 
               <TabsContent value="runs" className="mt-0 flex-1 overflow-y-auto border-0 p-4">
+                {liveRun && (
+                  <div className="mb-3">
+                    <div className="mb-1.5 flex items-center gap-2">
+                      <span className={cn("h-2 w-2 rounded-full", RUN_STATUS_DOT[liveRun.status])} />
+                      <span className="text-[10px] font-medium uppercase tracking-wider">Live run</span>
+                    </div>
+                    <RunConsole runId={liveRun.id} />
+                  </div>
+                )}
                 {runs.length === 0 ? (
                   <div className="text-xs text-muted-foreground italic">No runs yet.</div>
                 ) : (
@@ -342,6 +255,51 @@ export function IssueDetailView({ issueId }: IssueDetailViewProps) {
                     {runs.map((r) => (
                       <RunRow key={r.id} run={r} />
                     ))}
+                  </ul>
+                )}
+              </TabsContent>
+
+              <TabsContent value="comments" className="mt-0 flex-1 overflow-y-auto border-0 p-4">
+                {comments.length === 0 ? (
+                  <div className="text-xs text-muted-foreground italic">
+                    No comments. Agents post here via{" "}
+                    <code className="rounded bg-muted px-1 py-0.5">askcodi__addComment</code>.
+                  </div>
+                ) : (
+                  <ul className="space-y-3">
+                    {comments.map((c) => {
+                      const author = c.authorRuntimeAgentId
+                        ? agentById.get(c.authorRuntimeAgentId)
+                        : undefined
+                      return (
+                        <li
+                          key={c.id}
+                          className={cn(
+                            "rounded-lg border p-2.5 text-xs",
+                            c.isFromUser
+                              ? "border-primary/30 bg-primary/5"
+                              : "border-border bg-card/30",
+                          )}
+                        >
+                          <div className="mb-1 flex items-center gap-1.5 text-[10px] text-muted-foreground">
+                            {c.isFromUser ? (
+                              <>
+                                <UserIcon className="h-2.5 w-2.5" />
+                                <span>You</span>
+                              </>
+                            ) : (
+                              <>
+                                <Bot className="h-2.5 w-2.5" />
+                                <span>{author?.name ?? "(deleted agent)"}</span>
+                              </>
+                            )}
+                            <span>·</span>
+                            <span>{timeAgo(c.createdAt)}</span>
+                          </div>
+                          <div className="whitespace-pre-wrap leading-relaxed">{c.body}</div>
+                        </li>
+                      )
+                    })}
                   </ul>
                 )}
               </TabsContent>

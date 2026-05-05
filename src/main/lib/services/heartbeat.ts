@@ -68,6 +68,7 @@ export type WakeupSource =
   | "on_demand"
   | "automation"
   | "system"
+  | "fe_intake"  // FE wakes to route a newly-created assignee-less issue.
 
 export interface WakeupInput {
   runtimeAgentId: string

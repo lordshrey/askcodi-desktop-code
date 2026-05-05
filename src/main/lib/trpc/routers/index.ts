@@ -24,6 +24,7 @@ import { externalTasksRouter } from "./external-tasks"
 import { runtimeAgentsRouter } from "./runtime-agents"
 import { projectReposRouter } from "./project-repos"
 import { feThreadsRouter } from "./fe-threads"
+import { issueChatsRouter } from "./issue-chats"
 import { issuesRouter } from "./issues"
 import { agentRunsRouter } from "./agent-runs"
 import { agentRequestsRouter } from "./agent-requests"
@@ -64,6 +65,7 @@ export function createAppRouter(getWindow: () => BrowserWindow | null) {
     runtimeAgents: runtimeAgentsRouter,
     projectRepos: projectReposRouter,
     feThreads: feThreadsRouter,
+    issueChats: issueChatsRouter,
     issues: issuesRouter,
     agentRuns: agentRunsRouter,
     agentRequests: agentRequestsRouter,

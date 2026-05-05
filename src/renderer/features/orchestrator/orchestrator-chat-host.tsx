@@ -7,8 +7,9 @@ import { ChatView } from "../agents/main/active-chat"
 import { orchestratorChatIdAtom } from "./atoms"
 
 /**
- * Hosts <ChatView> inside OrchestratorLayout when a chat is explicitly opened
- * from inside the orchestrator (FE thread, WorkOnTaskDialog).
+ * Hosts <ChatView> inside OrchestratorLayout when a thread is explicitly
+ * opened from the FE thread tab. Issue-attached chats use IssueChatHost
+ * instead (mounted from IssueDetailView).
  *
  * Source of truth: orchestratorChatIdAtom (transient, never persisted) — kept
  * separate from selectedAgentChatIdAtom (per-window-persisted, drives Solo) so
